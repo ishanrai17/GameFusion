@@ -17,7 +17,7 @@ sys.argv = [a.replace('--local-rank', '--local_rank') for a in sys.argv]
 import os
 from model.GameFormer import GameFormer
 from utils.inter_pred_utils import *
-from interaction_prediction.gamefusion.utils import DrivingData
+from interaction_prediction.gamefusion.utilities import DrivingData
 
 
 # define model training epoch
