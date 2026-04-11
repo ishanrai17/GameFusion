@@ -9,10 +9,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 
 import sys
-sys.path.append('/content/GameFusion')
-sys.path.append('/content/GameFusion/interaction_prediction')
-sys.path.append('/content/GameFusion/utils')
-sys.path.append('/content/GameFusion/utils/inter_pred_utils')
+sys.path.insert(0, '/content/GameFusion')
+sys.path.insert(1, '/content/GameFusion/interaction_prediction')
 # Argument parsing for local rank
 sys.argv = [a.replace('--local-rank', '--local_rank') for a in sys.argv]
 
