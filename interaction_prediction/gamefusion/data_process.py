@@ -16,12 +16,12 @@ import os
 import sys
 sys.path.append('/content/GameFusion')
 sys.path.append('/content/GameFusion/interaction_prediction')
-from GameFusion.interaction_prediction.data_process import DataProcess
-from GameFusion.utils.data_utils import *
+from interaction_prediction.data_process import DataProcess
+from utils.data_utils import *
 
 class DataProcessv1(DataProcess):
     def __init__(self, root_dir, point_dir='', save_dir='', merger_save_path='',
-     ignore_vectorized_data=False, ignore_lidar_bev=False, ignore_lidar_pts=False):
+     ignore_vectorized_data=False, ignore_lidar_bev=False):
         super().__init__()
         self.data_files = root_dir
         self.root_dir = root_dir
