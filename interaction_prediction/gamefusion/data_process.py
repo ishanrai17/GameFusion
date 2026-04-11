@@ -187,7 +187,7 @@ class DataProcessv1(DataProcess):
 
         return vectorized_map.astype(np.float32), vectorized_crosswalks.astype(np.float32)
 
-    def merge_sensors_with_scenario(self, shard_dataset, shard_id):
+    def merge_sensors_with_scenario(self, shard_dataset, shard_id, split_type):
       os.makedirs("/content/data/lidar_and_camera", exist_ok=True)
       os.makedirs(self.merger_save_path, exist_ok=True)
       output_path = f"{self.merger_save_path}/merged_shard-{shard_id}.tfrecord"
@@ -207,7 +207,7 @@ class DataProcessv1(DataProcess):
           paths_file = "/content/data/paths.txt"
           with open(paths_file, "w") as f:
               for sid in batch:
-                  f.write(f"gs://waymo_open_dataset_motion_v_1_3_0/uncompressed/lidar_and_camera/training/{sid}.tfrecord\n")
+                  f.write(f"gs://waymo_open_dataset_motion_v_1_3_0/uncompressed/lidar_and_camera/{split_type}/{sid}.tfrecord\n")
           
           result = subprocess.run(
               ["bash", "-c", f"cat {paths_file} | gsutil -m cp -I /content/data/lidar_and_camera/"],
@@ -446,24 +446,29 @@ def parallel_process(root_dir):
     print(root_dir)
     processor = DataProcessv1(root_dir=[root_dir], point_dir=point_path, save_dir=save_path, merger_save_path=merger_save_path, ignore_vectorized_data=ignore_vectorized_data, ignore_lidar_bev=ignore_lidar_bev)
     if merge_sensors and not load_all_shards:
-        merge_sensors_with_scenario_wrapper(processor, shards_path)
+        merge_sensors_with_scenario_wrapper(processor, shards_path, args.split_type)
     if process_data:
         processor.process_data(viz=debug,test=test)
     print(f'{root_dir}-done!')
     
-def merge_sensors_with_scenario_wrapper(processor, shards_path):
+def merge_sensors_with_scenario_wrapper(processor, shards_path, split_type):
     print("\nMerging sensors with scenario...")
+    if split_type == 'testing' or split_type == 'validation':
+        shard_id = "00000-of-00150"
+    else:
+        split_type = 'training'
+        shard_id = "00000-of-01000"
     cmd = [
             "gsutil", "-m", "cp",
-            "gs://waymo_open_dataset_motion_v_1_3_0/uncompressed/scenario/training/training.tfrecord-00000-of-01000",
+            f"gs://waymo_open_dataset_motion_v_1_3_0/uncompressed/scenario/{split_type}/{split_type}.tfrecord-{shard_id}",
             shards_path
         ]
     subprocess.run(cmd, check=True)
-    print("training.tfrecord-00000-of-01000 shard downloaded successfully.\n")
-    filenames = tf.io.matching_files(os.path.join(shards_path, 'training.tfrecord-*'))        
+    print(f"{split_type}.tfrecord-{shard_id} shard downloaded successfully.\n")
+    filenames = tf.io.matching_files(os.path.join(shards_path, f'{split_type}.tfrecord-*'))        
     train_dataset = tf.data.TFRecordDataset(filenames, compression_type='')
     
-    processor.merge_sensors_with_scenario(train_dataset, "00000-of-01000")
+    processor.merge_sensors_with_scenario(train_dataset, shard_id, split_type)
   
 def main():
     parser = argparse.ArgumentParser(description='Data Processing Interaction Predictions')
@@ -481,6 +486,7 @@ def main():
     parser.add_argument('--use_multiprocessing', action="store_true", help='use multiprocessing', default=False)
     parser.add_argument('--ignore_vectorized_data', action="store_true", help='ignore vector data', default=False)
     parser.add_argument('--ignore_lidar_bev', action="store_true", help='ignore lidar bev', default=False)
+    parser.add_argument('--split_type', type=str, help='type of split to use', default='training')
     args = parser.parse_args()
         
     data_files = glob.glob(args.load_path+'/*')
@@ -497,7 +503,7 @@ def main():
     merge_sensors = args.merge_sensors
     ignore_vectorized_data = args.ignore_vectorized_data
     ignore_lidar_bev = args.ignore_lidar_bev
-
+    split_type = args.split_type
 
 
     os.makedirs(save_path, exist_ok=True)
@@ -508,7 +514,7 @@ def main():
     else:
         processor = DataProcessv1(root_dir=data_files, point_dir=point_path, save_dir=save_path, merger_save_path=merger_save_path, ignore_vectorized_data=ignore_vectorized_data, ignore_lidar_bev=ignore_lidar_bev)
         if merge_sensors and not load_all_shards:
-            merge_sensors_with_scenario_wrapper(processor, shards_path)
+            merge_sensors_with_scenario_wrapper(processor, shards_path, split_type)
         if process_data:
             processor.process_data(viz=debug,test=test)
     print('Done!')
