@@ -349,7 +349,6 @@ class DataProcessv1(DataProcess):
                 parsed_data.ParseFromString(data.numpy())
                 
                 scenario_id = parsed_data.scenario_id
-
                 self.scenario_id = scenario_id
                 objects_of_interest = parsed_data.objects_of_interest
 
@@ -417,23 +416,25 @@ class DataProcessv1(DataProcess):
                     # save data
                     inter = 'interest' if interesting==1 else 'r'
                     if not self.ignore_vectorized_data:
-                        os.makedirs(self.save_dir + "/vectorized", exist_ok=True)
-                        filename = self.save_dir + "/vectorized" + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
+                        os.makedirs(self.save_dir , exist_ok=True)
+                        filename = self.save_dir + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
                         if test:
                             np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
                             map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
                             object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
+                            lidar_bev=lidar_bev
                             )
                         else:
                             np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
                             map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
                             object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth), 
+                            lidar_bev=lidar_bev
                             )
           
-                    if not self.ignore_lidar_bev:
-                        os.makedirs(self.save_dir + "/lidar_bev", exist_ok=True)
-                        lidar_filename = self.save_dir + "/lidar_bev" + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
-                        np.savez_compressed(lidar_filename, lidar_bev=lidar_bev)
+                    # if not self.ignore_lidar_bev:
+                    #     os.makedirs(self.save_dir + "/lidar_bev", exist_ok=True)
+                    #     lidar_filename = self.save_dir + "/lidar_bev" + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
+                    #     np.savez_compressed(lidar_filename, lidar_bev=lidar_bev)
                         
                 
                 self.pbar.update(1)

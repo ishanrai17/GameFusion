@@ -13,9 +13,7 @@ class DrivingData(Dataset):
     
     def __getitem__(self, idx):
         vector_path = self.data_list[idx]
-        lidar_path = vector_path.replace('vectorized', 'lidar_bev')
         data = np.load(vector_path)
-        lidar_data = np.load(lidar_path)
         ego = data['ego'][0]
         neighbor = np.concatenate([data['ego'][1][np.newaxis,...], data['neighbors']], axis=0)
 
@@ -24,6 +22,6 @@ class DrivingData(Dataset):
         ego_future_states = data['gt_future_states'][0]
         neighbor_future_states = data['gt_future_states'][1]
         object_type = data['object_type']
-        lidar_bev = lidar_data['lidar_bev'].astype(np.float32)
+        lidar_bev = data['lidar_bev'].astype(np.float32)
 
         return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, lidar_bev
