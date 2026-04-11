@@ -190,7 +190,7 @@ class DataProcessv1(DataProcess):
     def merge_sensors_with_scenario(self, shard_dataset, shard_id, split_type):
       os.makedirs("/content/data/lidar_and_camera", exist_ok=True)
       os.makedirs(self.merger_save_path, exist_ok=True)
-      output_path = f"{self.merger_save_path}/merged_shard-{shard_id}.tfrecord"
+      output_path = f"{self.merger_save_path}/merged_{split_type}_shard-{shard_id}.tfrecord"
 
       # First pass: collect all scenario IDs
       scenario_ids = []
