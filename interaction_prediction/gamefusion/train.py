@@ -265,6 +265,31 @@ def main():
         # adjust learning rate
         scheduler.step()
 
+def emain():
+    # Test single item
+    dataset = DrivingData('/content/data/processed/train/vectorized/*')
+    print(f"Dataset size: {len(dataset)}")
+
+    item = dataset[0]
+    print(f"Number of items returned: {len(item)}")
+
+    for i, x in enumerate(item):
+        if hasattr(x, 'shape'):
+            print(f"  batch[{i}]: shape={x.shape}, dtype={x.dtype}")
+        else:
+            print(f"  batch[{i}]: {type(x)}")
+
+    # Verify lidar specifically
+    if len(item) > 7:
+        lidar = item[7]
+        print(f"\nLiDAR BEV loaded successfully!")
+        print(f"  Shape: {lidar.shape}")
+        print(f"  Dtype: {lidar.dtype}")
+        print(f"  Non-zero cells: {np.count_nonzero(lidar)}")
+        print(f"  Occupancy rate: {np.count_nonzero(lidar) / lidar.size * 100:.2f}%")
+    else:
+        print("\nNo lidar_bev in batch — check DrivingData.__getitem__")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Interaction Prediction Training')
     parser.add_argument("--local_rank", type=int)
@@ -287,4 +312,4 @@ if __name__ == "__main__":
     parser.add_argument("--encoder_layers", type=int, help='encoder layers', default=6)
     args = parser.parse_args()
 
-    main()
+    emain()
