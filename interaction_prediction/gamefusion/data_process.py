@@ -315,7 +315,20 @@ class DataProcessv1(DataProcess):
                 all_points.append(xyz_ri2.numpy())
 
             pts = np.concatenate(all_points, axis=0)
-            all_frames.append(pts)
+            
+            # Save original Z 
+            z_vehicle = pts[:, 2].copy()
+            
+            # Transform XY to global frame for alignment with trajectories
+            pose_np = pose.numpy()
+            ones = np.ones((pts.shape[0], 1))
+            pts_h = np.concatenate([pts, ones], axis=1)
+            pts_global = (pose_np @ pts_h.T).T[:, :3]
+            
+            # Replace Z with vehicle-frame Z
+            pts_global[:, 2] = z_vehicle
+            
+            all_frames.append(pts_global)
         
         return all_frames
 
