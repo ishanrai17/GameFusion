@@ -448,7 +448,22 @@ class DataProcess(object):
                 self.sdc_ids_list.append(((ego_id, can[0]), 0))
 
     def extract_camera_tokens(self, parsed_data):
-        camera_array = np.zeros((self.hist_len, 8, 256), dtype=np.float32)
+        camera_array = np.zeros((self.hist_len, 8, 256), dtype=np.int32)
+
+        if len(parsed_data.frame_camera_tokens) == 0:
+            scenario_id = parsed_data.scenario_id
+            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/scenario/training/{scenario_id}.tfrecord'
+            try:
+                camera_dataset = tf.data.TFRecordDataset(camera_file)
+                print(f"Camera tokens found for scenario {scenario_id}. Dimensions: {camera_array.shape}")
+                for cam_data in camera_dataset:
+                    camera_scenario = scenario_pb2.Scenario()
+                    camera_scenario.ParseFromString(cam_data.numpy())
+                    parsed_data.frame_camera_tokens.MergeFrom(camera_scenario.frame_camera_tokens)
+                    break
+            except:
+                pass
+
         if len(parsed_data.frame_camera_tokens) > 0:
             for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
                 if frame_idx >= self.hist_len:
