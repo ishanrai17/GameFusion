@@ -464,7 +464,7 @@ class DataProcess(object):
                 pass
 
         if len(parsed_data.frame_camera_tokens) > 0:
-            print(f"Camera tokens found for scenario {parsed_data.scenario_id}. Dimensions: {parsed_data.frame_camera_tokens}")
+            print(f"Camera tokens found for scenario {parsed_data.scenario_id}. Dimensions: {len(parsed_data.frame_camera_tokens)} frames, {len(parsed_data.frame_camera_tokens[0].camera_tokens)} cameras per frame.")
 
             for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
                 if frame_idx >= self.hist_len:
