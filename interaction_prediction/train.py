@@ -46,7 +46,7 @@ def training_epoch(train_data, model, optimizer, epoch):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
         optimizer.step()
-        
+
         p_ade,p_fde,pr_ade,pr_fde = motion_metrics(future[0], ego_future, neighbor_future)
         ADE.append(p_ade)
         FDE.append(p_fde)
@@ -65,7 +65,7 @@ def training_epoch(train_data, model, optimizer, epoch):
                 f"Pred-2:ADE{np.mean(ADEp):>.4f}-FDE{np.mean(FDEp):>.4f}|"+
                 f"{(time.time()-start_time)/current:>.4f}s/sample"
                 )
-    
+
     return epoch_loss
 
 # define model validation epoch
@@ -104,18 +104,18 @@ def validation_epoch(valid_data, model, epoch):
         epoch_loss.append(loss.item())
         egos = outputs[f'level_{args.level}_interactions'][:, :, :, :, :2]
         scores = outputs[f'level_{args.level}_scores']
-     
+
         object_type = batch[6]
         ego = inputs['ego_state']
         actors = torch.stack([ego,inputs['neighbors_state'][:, 0]],dim=1)
         actors_future = torch.stack([ego_future, neighbor_future],dim=1)
         ego_ground_truth = torch.cat([actors[:, :, :, :5], actors_future], dim=2)
         ego_ground_truth = torch.cat([
-            ego_ground_truth[:, :, :, :2], 
-            actors[:,:, -1, 5:7].unsqueeze(2).expand(-1,-1, ego_ground_truth.shape[2], -1), 
+            ego_ground_truth[:, :, :, :2],
+            actors[:,:, -1, 5:7].unsqueeze(2).expand(-1,-1, ego_ground_truth.shape[2], -1),
             ego_ground_truth[:, :, :, 2:]
             ], dim=-1)
-        
+
         egos = egos.permute(0,2,1,3,4)
         scores = scores.sum(1)
         scores = F.softmax(scores,dim=-1)
@@ -127,8 +127,8 @@ def validation_epoch(valid_data, model, epoch):
         FDEp.append(pr_fde)
 
         epoch_metrics.update_state(
-                    egos, scores, 
-                    ego_ground_truth, torch.ne(ego_ground_truth, 0).bool(), 
+                    egos, scores,
+                    ego_ground_truth, torch.ne(ego_ground_truth, 0).bool(),
                     object_type.long()
                     )
 
@@ -141,9 +141,9 @@ def validation_epoch(valid_data, model, epoch):
                 f"Pred-2:ADE{np.mean(ADEp):>.4f}-FDE{np.mean(FDEp):>.4f}|"+
                 f"{(time.time()-start_time)/current:>.4f}s/sample"
                 )
-        
+
     epoch_metrics = epoch_metrics.result()
-    
+
     return epoch_metrics, epoch_loss
 
 # Define model training process
@@ -167,7 +167,7 @@ def main():
                 modalities=args.modalities,
                 encoder_layers=args.encoder_layers,
                 decoder_levels=args.level,
-                future_len=args.future_len, 
+                future_len=args.future_len,
                 neighbors_to_predict=args.neighbors_to_predict
                 )
 
@@ -177,11 +177,11 @@ def main():
     # define optimizer and loss function
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
     scheduler = optim.lr_scheduler.MultiStepLR(
-                                            optimizer, 
-                                            milestones=[20, 22, 24, 26, 28], 
+                                            optimizer,
+                                            milestones=[20, 22, 24, 26, 28],
                                             gamma=0.5,
                                             verbose=True)
-    
+
     # load ckpts:
     curr_ep = 0
     if args.load_dir != '':
@@ -191,7 +191,7 @@ def main():
         optimizer.load_state_dict(model_ckpts['optim_states'])
         curr_ep = model_ckpts['current_ep']
         scheduler.step(curr_ep)
-    
+
     # datasets:
     train_dataset = DrivingData(args.train_set+'/*')
     valid_dataset = DrivingData(args.valid_set+'/*')
@@ -205,7 +205,7 @@ def main():
     train_sampler = DistributedSampler(train_dataset)
     valid_sampler = DistributedSampler(valid_dataset, shuffle=False)
     train_data = DataLoader(
-        train_dataset, batch_size=args.batch_size, 
+        train_dataset, batch_size=args.batch_size,
         sampler=train_sampler, num_workers=args.workers
         )
     valid_data = DataLoader(
@@ -219,7 +219,7 @@ def main():
     for epoch in range(epochs):
         if dist.get_rank() == 0:
             logging.info(f"Epoch {epoch+1}/{epochs}")
-        
+
         if epoch<=curr_ep and epoch!=0:
             continue
 
@@ -231,7 +231,7 @@ def main():
 
         # save to training log
         log = {
-            'epoch': epoch+1, 
+            'epoch': epoch+1,
             'train_loss': np.mean(train_loss), 'val_loss': np.mean(val_loss),
             'lr': optimizer.param_groups[0]['lr']
             }
@@ -241,15 +241,15 @@ def main():
         if dist.get_rank() == 0:
             # log & save
             if epoch == 0:
-                with open(log_path + f'train_log.csv', 'w') as csv_file: 
-                    writer = csv.writer(csv_file) 
+                with open(log_path + f'train_log.csv', 'w') as csv_file:
+                    writer = csv.writer(csv_file)
                     writer.writerow(log.keys())
                     writer.writerow(log.values())
             else:
-                with open(log_path + f'train_log.csv', 'a') as csv_file: 
+                with open(log_path + f'train_log.csv', 'a') as csv_file:
                     writer = csv.writer(csv_file)
                     writer.writerow(log.values())
-            
+
             save_state = {
                 'optim_states' : optimizer.state_dict(),
                 'model_states' :model.state_dict(),
@@ -262,7 +262,7 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Interaction Prediction Training')
-    parser.add_argument("--local-rank", type=int)
+    parser.add_argument("--local_rank", type=int)
     # training
     parser.add_argument("--batch_size", type=int, help='training batch sizes', default=16)
     parser.add_argument("--training_epochs", type=int, help='training epochs', default=30)
