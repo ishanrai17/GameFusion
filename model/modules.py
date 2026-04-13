@@ -92,7 +92,7 @@ class CrosswalkEncoder(nn.Module):
     
 
 class CameraTokenEncoder(nn.Module):
-    def __init__(self, vocab_size=1024, embed_dim=128, output_dim=256, num_steps=11, num_cameras=8):
+    def __init__(self, vocab_size=1025, embed_dim=128, output_dim=256, num_steps=11, num_cameras=8):
         super(CameraTokenEncoder, self).__init__()
         self.num_steps = num_steps
         self.num_cameras = num_cameras
