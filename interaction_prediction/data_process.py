@@ -452,7 +452,7 @@ class DataProcess(object):
 
         if len(parsed_data.frame_camera_tokens) == 0:
             scenario_id = parsed_data.scenario_id
-            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/lidar_and_camera/training/{scenario_id}.tfrecord'
+            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/lidar_and_camera/testing/{scenario_id}.tfrecord'
             try:
                 camera_dataset = tf.data.TFRecordDataset(camera_file)
                 for cam_data in camera_dataset:
