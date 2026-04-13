@@ -23,6 +23,7 @@ class DataProcess(object):
                 root_dir=[''],
                 point_dir='',
                 save_dir='',
+                camera_dir='',
                 num_neighbors=32
                 ):
         # parameters
@@ -32,6 +33,7 @@ class DataProcess(object):
         self.data_files = root_dir
         self.point_dir = point_dir
         self.save_dir = save_dir
+        self.camera_dir = camera_dir
 
 
     def build_points(self):
@@ -452,7 +454,7 @@ class DataProcess(object):
 
         if len(parsed_data.frame_camera_tokens) == 0:
             scenario_id = parsed_data.scenario_id
-            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/lidar_and_camera/testing/{scenario_id}.tfrecord'
+            camera_file = f'{self.camera_dir}/{scenario_id}.tfrecord'
             try:
                 camera_dataset = tf.data.TFRecordDataset(camera_file)
                 for cam_data in camera_dataset:
@@ -577,6 +579,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug', action="store_true", help='visualize processed data', default=False)
     parser.add_argument('--test', action="store_true", help='whether to process testing set', default=False)
     parser.add_argument('--use_multiprocessing', action="store_true", help='use multiprocessing', default=False)
+    parser.add_argument('--camera_dir', type=str, help='path to load camera tokens (Currently not included in the pipeline)', default='')
 
     args = parser.parse_args()
     data_files = glob.glob(args.load_path+'/*')
@@ -584,12 +587,13 @@ if __name__ == "__main__":
     point_path = args.point_path
     debug = args.debug
     test = args.test
+    camera_dir = args.camera_dir
     os.makedirs(save_path, exist_ok=True)
 
     if args.use_multiprocessing:
         with Pool(processes=args.processes) as p:
             p.map(parallel_process, data_files)
     else:
-        processor = DataProcess(root_dir=data_files, point_dir=point_path, save_dir=save_path)
+        processor = DataProcess(root_dir=data_files, point_dir=point_path, save_dir=save_path, camera_dir=camera_dir)
         processor.process_data(viz=debug,test=test)
     print('Done!')
