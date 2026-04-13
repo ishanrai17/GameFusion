@@ -34,9 +34,6 @@ def training_epoch(train_data, model, optimizer, epoch):
             'camera_tokens': batch[7].to(args.local_rank)
         }
 
-        cam = batch[7]
-        print(f"camera token min: {cam.min()}, max: {cam.max()}")
-
         ego_future = batch[4].to(args.local_rank)
         neighbor_future = batch[5].to(args.local_rank)
 
