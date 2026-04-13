@@ -447,6 +447,19 @@ class DataProcess(object):
             for can in sorted_candidate:
                 self.sdc_ids_list.append(((ego_id, can[0]), 0))
 
+    def extract_camera_tokens(self, parsed_data):
+        camera_array = np.zeros((self.hist_len, 8, 256), dtype=np.float32)
+        if len(parsed_data.frame_camera_tokens) > 0:
+            for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
+                if frame_idx >= self.hist_len:
+                    break
+                for cam_idx, cam in enumerate(frame.camera_tokens):
+                    if cam_idx >= 8:
+                        break
+                    tokens = list(cam.tokens)
+                    camera_array[frame_idx, cam_idx, :len(tokens)] = tokens
+        return camera_array
+
     def process_data(self, viz=True,test=False):
 
         if self.point_dir != '':
@@ -477,6 +490,7 @@ class DataProcess(object):
                     interact_list.append(id_list[int_id])
 
                 self.build_map(parsed_data.map_features, parsed_data.dynamic_map_states)
+                camera_tokens = self.extract_camera_tokens(parsed_data)
 
                 if test:
                     if parsed_data.tracks[tracks_to_predict[0].track_index].object_type==1:
@@ -519,11 +533,13 @@ class DataProcess(object):
                     if test:
                         np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes),
                         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]))
+                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
+                        camera_tokens=camera_tokens)
                     else:
                         np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes),
                         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth))
+                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth),
+                        camera_tokens=camera_tokens)
 
                 self.pbar.update(1)
 
