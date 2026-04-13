@@ -262,7 +262,7 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Interaction Prediction Training')
-    parser.add_argument("--local_rank", type=int)
+    parser.add_argument("--local-rank", type=int)
     # training
     parser.add_argument("--batch_size", type=int, help='training batch sizes', default=16)
     parser.add_argument("--training_epochs", type=int, help='training epochs', default=30)
