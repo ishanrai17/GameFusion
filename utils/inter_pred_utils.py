@@ -47,8 +47,9 @@ class DrivingData(Dataset):
         ego_future_states = data['gt_future_states'][0]
         neighbor_future_states = data['gt_future_states'][1]
         object_type = data['object_type']
+        camera_tokens = data['camera_tokens'] if 'camera_tokens' in data else np.zeros((11, 8, 256), dtype=np.float32)
 
-        return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type
+        return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, camera_tokens
 
 
 def imitation_loss(trajectories, ground_truth,gmm=True):

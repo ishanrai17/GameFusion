@@ -91,6 +91,39 @@ class CrosswalkEncoder(nn.Module):
         return output
     
 
+class CameraTokenEncoder(nn.Module):
+    def __init__(self, vocab_size=1024, embed_dim=128, output_dim=256, num_steps=11, num_cameras=8):
+        super(CameraTokenEncoder, self).__init__()
+        self.num_steps = num_steps
+        self.num_cameras = num_cameras
+        self.token_embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.temporal_embedding = nn.Embedding(num_steps, embed_dim)
+        self.camera_embedding = nn.Embedding(num_cameras, embed_dim)
+        self.spatial_net = nn.Sequential(nn.Linear(embed_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
+
+    def forward(self, tokens):
+        # tokens: (B, T, C, N) long — discrete VQ-VAE indices
+        B, T, C, N = tokens.shape
+
+        # embed tokens and add positional embeddings
+        x = self.token_embedding(tokens)  # (B, T, C, N, embed_dim)
+        t_emb = self.temporal_embedding(torch.arange(T, device=tokens.device))  # (T, embed_dim)
+        c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))    # (C, embed_dim)
+        x = x + t_emb[None, :, None, None, :] + c_emb[None, None, :, None, :]
+
+        # spatial aggregation: MLP + max-pool over N tokens per camera-frame
+        x = self.spatial_net(x)        # (B, T, C, N, output_dim)
+        x = x.max(dim=3).values       # (B, T, C, output_dim)
+
+        # temporal aggregation: max-pool over T timesteps
+        x = x.max(dim=1).values       # (B, C, output_dim)
+
+        # mask: True where camera has no tokens (all zeros)
+        camera_mask = (tokens.sum(dim=(1, 3)) == 0)  # (B, C)
+
+        return x, camera_mask
+
+
 class FutureEncoder(nn.Module):
     def __init__(self):
         super(FutureEncoder, self).__init__()

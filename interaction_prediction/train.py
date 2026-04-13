@@ -31,6 +31,7 @@ def training_epoch(train_data, model, optimizer, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
+            'camera_tokens': batch[7].to(args.local_rank)
         }
 
         ego_future = batch[4].to(args.local_rank)
@@ -88,6 +89,7 @@ def validation_epoch(valid_data, model, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
+            'camera_tokens': batch[7].to(args.local_rank)
         }
 
         ego_future = batch[4].to(args.local_rank)
