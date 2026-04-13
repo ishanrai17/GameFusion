@@ -452,10 +452,9 @@ class DataProcess(object):
 
         if len(parsed_data.frame_camera_tokens) == 0:
             scenario_id = parsed_data.scenario_id
-            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/scenario/training/{scenario_id}.tfrecord'
+            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/lidar_and_camera/training/{scenario_id}.tfrecord'
             try:
                 camera_dataset = tf.data.TFRecordDataset(camera_file)
-                print(f"Camera tokens found for scenario {scenario_id}. Dimensions: {camera_array.shape}")
                 for cam_data in camera_dataset:
                     camera_scenario = scenario_pb2.Scenario()
                     camera_scenario.ParseFromString(cam_data.numpy())
@@ -465,6 +464,8 @@ class DataProcess(object):
                 pass
 
         if len(parsed_data.frame_camera_tokens) > 0:
+            print(f"Camera tokens found for scenario {parsed_data.scenario_id}. Dimensions: {parsed_data.frame_camera_tokens}")
+
             for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
                 if frame_idx >= self.hist_len:
                     break
@@ -472,7 +473,7 @@ class DataProcess(object):
                     if cam_idx >= 8:
                         break
                     tokens = list(cam.tokens)
-                    camera_array[frame_idx, cam_idx, :len(tokens)] = tokens
+                    camera_array[frame_idx, cam_idx, :len(tokens)] = [t + 1 for t in tokens]
         return camera_array
 
     def process_data(self, viz=True,test=False):
