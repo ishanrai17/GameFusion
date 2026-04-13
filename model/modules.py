@@ -100,6 +100,9 @@ class CameraTokenEncoder(nn.Module):
         self.temporal_embedding = nn.Embedding(num_steps, embed_dim)
         self.camera_embedding = nn.Embedding(num_cameras, embed_dim)
         self.spatial_net = nn.Sequential(nn.Linear(embed_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
+        # zero-init output layer so camera branch starts as no-op
+        nn.init.zeros_(self.spatial_net[-1].weight)
+        nn.init.zeros_(self.spatial_net[-1].bias)
 
     def forward(self, tokens):
         # tokens: (B, T, C, N) long — discrete VQ-VAE indices
