@@ -175,7 +175,17 @@ def main():
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     # define optimizer and loss function
-    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
+    camera_names = {'camera_encoder', 'camera_cross_attn', 'camera_cross_norm',
+                'camera_cross_ffn', 'camera_cross_ffn_norm', 'aux_head'}
+    camera_params = [p for n, p in model.named_parameters() if any(c in n for c in camera_names)]
+    other_params = [p for n, p in model.named_parameters() if not any(c in n for c in camera_names)]
+
+    optimizer = optim.AdamW([
+        {'params': other_params, 'lr': args.learning_rate},
+        {'params': camera_params, 'lr': args.learning_rate * 5}
+    ])
+
+
     scheduler = optim.lr_scheduler.MultiStepLR(
                                             optimizer, 
                                             milestones=[20, 22, 24, 26, 28], 
