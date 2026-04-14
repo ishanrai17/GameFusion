@@ -453,7 +453,9 @@ def parallel_process(root_dir):
     
 def merge_sensors_with_scenario_wrapper(processor, shards_path, split_type):
     print("\nMerging sensors with scenario...")
-    if split_type == 'testing' or split_type == 'validation':
+    if split_type == 'testing':
+        shard_id = "00001-of-00150"
+    elif split_type == 'validation':
         shard_id = "00000-of-00150"
     else:
         split_type = 'training'
