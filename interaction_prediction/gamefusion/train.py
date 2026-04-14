@@ -200,12 +200,14 @@ def main():
     # datasets:
     train_dataset = DrivingData(args.train_set+'/*')
     valid_dataset = DrivingData(args.valid_set+'/*')
+    test_dataset = DrivingData(args.test_set+'/*')
 
     training_size = len(train_dataset)
     valid_size = len(valid_dataset)
+    test_size = len(test_dataset)
 
     if dist.get_rank() == 0:
-        logging.info(f'Length train: {training_size}; Valid: {valid_size}')
+        logging.info(f'Length train: {training_size}; Valid: {valid_size}; Test: {test_size}')
 
     train_sampler = DistributedSampler(train_dataset)
     valid_sampler = DistributedSampler(valid_dataset, shuffle=False)
@@ -216,6 +218,10 @@ def main():
     valid_data = DataLoader(
         valid_dataset, batch_size=args.batch_size,
         sampler=valid_sampler, num_workers=args.workers
+        )
+    test_data = DataLoader(
+        test_dataset, batch_size=args.batch_size,
+        sampler=DistributedSampler(test_dataset, shuffle=False), num_workers=args.workers
         )
 
     #start training:
@@ -233,15 +239,18 @@ def main():
 
         train_loss = training_epoch(train_data, model, optimizer, epoch)
         valid_metrics, val_loss = validation_epoch(valid_data, model, epoch)
+        test_metrics, test_loss = validation_epoch(test_data, model, epoch)
 
         # save to training log
         log = {
             'epoch': epoch+1, 
-            'train_loss': np.mean(train_loss), 'val_loss': np.mean(val_loss),
+            'train_loss': np.mean(train_loss), 'val_loss': np.mean(val_loss), 
+            'test_loss': np.mean(test_loss),
             'lr': optimizer.param_groups[0]['lr']
             }
 
         log.update(valid_metrics)
+        log.update(test_metrics)
 
         if dist.get_rank() == 0:
             # log & save
