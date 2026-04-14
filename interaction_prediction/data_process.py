@@ -35,8 +35,6 @@ class DataProcess(object):
         self.save_dir = save_dir
         self.camera_dir = camera_dir
 
-        print("Camera directory set to: {}".format(self.camera_dir))
-
 
     def build_points(self):
         self.points_dict = {}
@@ -453,7 +451,6 @@ class DataProcess(object):
 
     def extract_camera_tokens(self, parsed_data):
         print(f"Extracting camera tokens for scenario {parsed_data.scenario_id}...")
-        print(f"from {self.camera_dir}")
 
 
         camera_array = np.zeros((self.hist_len, 8, 256), dtype=np.int32)
@@ -571,7 +568,7 @@ class DataProcess(object):
 
 def parallel_process(root_dir):
     print(root_dir)
-    processor = DataProcess(root_dir=[root_dir], point_dir=point_path, save_dir=save_path)
+    processor = DataProcess(root_dir=[root_dir], point_dir=point_path, save_dir=save_path, camera_dir=camera_dir)
     processor.process_data(viz=debug,test=test)
     print(f'{root_dir}-done!')
 
@@ -587,8 +584,6 @@ if __name__ == "__main__":
     parser.add_argument('--use_multiprocessing', action="store_true", help='use multiprocessing', default=False)
     parser.add_argument('--camera_dir', type=str, help='path to load camera tokens (Currently not included in the pipeline)', default='')
 
-    print("Starting data processing... {}".format(sys.argv))
-
     args = parser.parse_args()
     data_files = glob.glob(args.load_path+'/*')
     save_path = args.save_path
@@ -596,9 +591,6 @@ if __name__ == "__main__":
     debug = args.debug
     test = args.test
     camera_dir = args.camera_dir
-
-    print(f"Camera directory: {camera_dir}")
-
     os.makedirs(save_path, exist_ok=True)
 
     if args.use_multiprocessing:
