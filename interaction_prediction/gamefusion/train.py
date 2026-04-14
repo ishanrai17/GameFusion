@@ -287,6 +287,7 @@ if __name__ == "__main__":
     parser.add_argument('--load_dir', type=str, help='name to load ckpts from log path (e.g. epochs_0.pth)', default='')
     parser.add_argument('--train_set', type=str, help='path to train data')
     parser.add_argument('--valid_set', type=str, help='path to validation data')
+    parser.add_argument('--test_set', type=str, help='path to test data')
     parser.add_argument("--workers", type=int, default=8, help="number of workers used for dataloader")
     # model
     parser.add_argument("--level", type=int, help='decoder reasoning levels (K)', default=3)
