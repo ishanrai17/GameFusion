@@ -101,9 +101,15 @@ class CameraTokenEncoder(nn.Module):
         self.camera_embedding = nn.Embedding(num_cameras, embed_dim)
         self.spatial_net = nn.Sequential(nn.Linear(embed_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
 
-        # lightweight learned pooling (replaces max-pool)
+        # lightweight learned pooling
         self.spatial_gate = nn.Linear(output_dim, 1)
         self.temporal_gate = nn.Linear(output_dim, 1)
+
+        # cross-camera self-attention (1 layer, 8 cameras is a short sequence)
+        self.camera_self_attn = nn.TransformerEncoderLayer(
+            d_model=output_dim, nhead=4, dim_feedforward=output_dim * 2,
+            activation=F.gelu, dropout=0.1, batch_first=True
+        )
 
         # zero-init output so camera branch starts as no-op
         self.out_proj = nn.Linear(output_dim, output_dim)
@@ -111,32 +117,36 @@ class CameraTokenEncoder(nn.Module):
         nn.init.zeros_(self.out_proj.bias)
 
     def forward(self, tokens):
-        # tokens: (B, T, C, N) long — discrete VQ-VAE indices
         B, T, C, N = tokens.shape
 
         # embed tokens and add positional embeddings
-        x = self.token_embedding(tokens)                                        # (B, T, C, N, embed_dim)
-        t_emb = self.temporal_embedding(torch.arange(T, device=tokens.device))  # (T, embed_dim)
-        c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))    # (C, embed_dim)
+        x = self.token_embedding(tokens)
+        t_emb = self.temporal_embedding(torch.arange(T, device=tokens.device))
+        c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))
         x = x + t_emb[None, :, None, None, :] + c_emb[None, None, :, None, :]
+        x = self.spatial_net(x)                                         # (B, T, C, N, D)
 
-        # spatial aggregation: MLP + learned weighted pool over N tokens
-        x = self.spatial_net(x)                                                 # (B, T, C, N, output_dim)
-        token_mask = (tokens == 0).unsqueeze(-1)                                # (B, T, C, N, 1)
-        s_weights = self.spatial_gate(x).masked_fill(token_mask, -1e9)          # (B, T, C, N, 1)
+        # spatial: learned gated pooling over N tokens
+        token_mask = (tokens == 0).unsqueeze(-1)                        # (B, T, C, N, 1)
+        s_weights = self.spatial_gate(x).masked_fill(token_mask, -1e9)  # (B, T, C, N, 1)
         s_weights = s_weights.softmax(dim=3)
-        x = (x * s_weights).sum(dim=3)                                         # (B, T, C, output_dim)
+        x = (x * s_weights).sum(dim=3)                                 # (B, T, C, D)
 
-        # temporal aggregation: learned weighted pool over T timesteps
-        step_mask = (tokens.sum(dim=3) == 0).unsqueeze(-1)                      # (B, T, C, 1)
-        t_weights = self.temporal_gate(x).masked_fill(step_mask, -1e9)          # (B, T, C, 1)
+        # cross-camera self-attention per timestep
+        cam_mask = (tokens.sum(dim=3) == 0)                             # (B, T, C)
+        x_flat = x.reshape(B * T, C, -1)                               # (B*T, C, D)
+        cm_flat = cam_mask.reshape(B * T, C)                            # (B*T, C)
+        x_flat = self.camera_self_attn(x_flat, src_key_padding_mask=cm_flat)
+        x = x_flat.reshape(B, T, C, -1)                                # (B, T, C, D)
+
+        # temporal: learned gated pooling over T timesteps
+        step_mask = (tokens.sum(dim=3) == 0).unsqueeze(-1)              # (B, T, C, 1)
+        t_weights = self.temporal_gate(x).masked_fill(step_mask, -1e9)  # (B, T, C, 1)
         t_weights = t_weights.softmax(dim=1)
-        x = (x * t_weights).sum(dim=1)                                         # (B, C, output_dim)
+        x = (x * t_weights).sum(dim=1)                                 # (B, C, D)
 
         x = self.out_proj(x)
-
-        # mask: True where camera has no tokens (all zeros)
-        camera_mask = (tokens.sum(dim=(1, 3)) == 0)                             # (B, C)
+        camera_mask = (tokens.sum(dim=(1, 3)) == 0)                     # (B, C)
 
         return x, camera_mask
 
