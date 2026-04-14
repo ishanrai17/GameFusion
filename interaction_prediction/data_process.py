@@ -450,6 +450,10 @@ class DataProcess(object):
                 self.sdc_ids_list.append(((ego_id, can[0]), 0))
 
     def extract_camera_tokens(self, parsed_data):
+        print(f"Extracting camera tokens for scenario {parsed_data.scenario_id}...")
+        print(f"from {self.camera_dir}")
+
+
         camera_array = np.zeros((self.hist_len, 8, 256), dtype=np.int32)
 
         if len(parsed_data.frame_camera_tokens) == 0:
