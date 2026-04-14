@@ -9,7 +9,7 @@ class Encoder(nn.Module):
         self._neighbors = neighbors_to_predict
         self.agent_encoder = AgentEncoder()
         self.ego_encoder = AgentEncoder()
-        self.lane_encoder = LaneEncoder()
+        # self.lane_encoder = LaneEncoder()
         # self.crosswalk_encoder = CrosswalkEncoder()
         self.camera_encoder = CameraTokenEncoder()
         self.camera_cross_attn = nn.MultiheadAttention(dim, heads, dropout=dropout, batch_first=True)
@@ -44,9 +44,9 @@ class Encoder(nn.Module):
         actors_mask = torch.eq(actors[:, :, -1].sum(-1), 0)
 
         # map encoding
-        map_lanes = inputs['map_lanes']
+        # map_lanes = inputs['map_lanes']
         # map_crosswalks = inputs['map_crosswalks']
-        encoded_map_lanes = self.lane_encoder(map_lanes)
+        # encoded_map_lanes = self.lane_encoder(map_lanes)
         # encoded_map_crosswalks = self.crosswalk_encoder(map_crosswalks)
 
         # camera encoding (scene-level, shared across agents)
@@ -66,18 +66,23 @@ class Encoder(nn.Module):
         assert actors.shape[1] >= N, 'Too many neighbors to predict'
 
         for i in range(N):
-            lanes, lanes_mask = self.segment_map(map_lanes[:, i], encoded_map_lanes[:, i])
+            # lanes, lanes_mask = self.segment_map(map_lanes[:, i], encoded_map_lanes[:, i])
             # crosswalks, crosswalks_mask = self.segment_map(map_crosswalks[:, i], encoded_map_crosswalks[:, i])
             if encoded_camera is not None:
                 # fusion_input = torch.cat([encoded_actors, lanes, crosswalks, encoded_camera], dim=1)
                 # mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask, camera_mask], dim=1)
-                fusion_input = torch.cat([encoded_actors, lanes, encoded_camera], dim=1)
-                mask = torch.cat([actors_mask, lanes_mask, camera_mask], dim=1)
+                # fusion_input = torch.cat([encoded_actors, lanes, encoded_camera], dim=1)
+                # mask = torch.cat([actors_mask, lanes_mask, camera_mask], dim=1)
+                fusion_input = torch.cat([encoded_actors, encoded_camera], dim=1)
+                mask = torch.cat([actors_mask, camera_mask], dim=1)
             else:
                 # fusion_input = torch.cat([encoded_actors, lanes, crosswalks], dim=1)
                 # mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask], dim=1)
-                fusion_input = torch.cat([encoded_actors, lanes], dim=1)
-                mask = torch.cat([actors_mask, lanes_mask], dim=1)
+                # fusion_input = torch.cat([encoded_actors, lanes], dim=1)
+                # mask = torch.cat([actors_mask, lanes_mask], dim=1)
+                fusion_input = torch.cat([encoded_actors], dim=1)
+                mask = torch.cat([actors_mask], dim=1)
+
             masks.append(mask)
             encoding = self.fusion_encoder(fusion_input, src_key_padding_mask=mask)
             encodings.append(encoding)
