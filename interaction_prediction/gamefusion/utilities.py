@@ -23,5 +23,6 @@ class DrivingData(Dataset):
         neighbor_future_states = data['gt_future_states'][1]
         object_type = data['object_type']
         lidar_bev = data['lidar_bev'].astype(np.float32)
+        lidar_bev = np.transpose(lidar_bev, (0, 2, 1, 3, 4))
 
         return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, lidar_bev
