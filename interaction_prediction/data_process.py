@@ -35,6 +35,8 @@ class DataProcess(object):
         self.save_dir = save_dir
         self.camera_dir = camera_dir
 
+        print("Camera directory set to: {}".format(self.camera_dir))
+
 
     def build_points(self):
         self.points_dict = {}
