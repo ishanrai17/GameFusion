@@ -236,6 +236,7 @@ def main():
 
         train_data.sampler.set_epoch(epoch)
         valid_data.sampler.set_epoch(epoch)
+        test_data.sampler.set_epoch(epoch)
 
         train_loss = training_epoch(train_data, model, optimizer, epoch)
         valid_metrics, val_loss = validation_epoch(valid_data, model, epoch)
