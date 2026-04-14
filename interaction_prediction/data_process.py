@@ -594,6 +594,9 @@ if __name__ == "__main__":
     debug = args.debug
     test = args.test
     camera_dir = args.camera_dir
+
+    print(f"Camera directory: {camera_dir}")
+
     os.makedirs(save_path, exist_ok=True)
 
     if args.use_multiprocessing:
