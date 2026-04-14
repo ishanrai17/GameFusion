@@ -585,6 +585,8 @@ if __name__ == "__main__":
     parser.add_argument('--use_multiprocessing', action="store_true", help='use multiprocessing', default=False)
     parser.add_argument('--camera_dir', type=str, help='path to load camera tokens (Currently not included in the pipeline)', default='')
 
+    print("Starting data processing... {}".format(sys.argv))
+
     args = parser.parse_args()
     data_files = glob.glob(args.load_path+'/*')
     save_path = args.save_path
