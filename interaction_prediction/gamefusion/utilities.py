@@ -10,12 +10,12 @@ class DrivingData(Dataset):
 
     def __len__(self):
         return len(self.data_list)
-    
+
     def __getitem__(self, idx):
         vector_path = self.data_list[idx]
         data = np.load(vector_path)
         ego = data['ego'][0]
-        neighbor = np.concatenate([data['ego'][1][np.newaxis,...], data['neighbors']], axis=0)
+        neighbor = np.concatenate([data['ego'][1][np.newaxis, ...], data['neighbors']], axis=0)
 
         map_lanes = data['map_lanes'][:, :, :200:2]
         map_crosswalks = data['map_crosswalks'][:, :, :100:2]
@@ -24,5 +24,6 @@ class DrivingData(Dataset):
         object_type = data['object_type']
         lidar_bev = data['lidar_bev'].astype(np.float32)
         lidar_bev = np.transpose(lidar_bev, (1, 0, 2, 3))
+        camera_tokens = data['camera_tokens'].astype(np.float32)
 
-        return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, lidar_bev
+        return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, lidar_bev, camera_tokens
