@@ -11,7 +11,11 @@ class Encoder(nn.Module):
         self.ego_encoder = AgentEncoder()
         self.lane_encoder = LaneEncoder()
         self.crosswalk_encoder = CrosswalkEncoder()
+        # Camera tokens
         self.camera_encoder = CameraTokenEncoder()
+        self.camera_cross_attn = nn.MultiheadAttention(dim, heads, dropout=dropout, batch_first=True)
+        self.camera_cross_norm = nn.LayerNorm(dim)
+
         attention_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=dim*4,
                                                      activation=F.gelu, dropout=dropout, batch_first=True)
         self.fusion_encoder = nn.TransformerEncoder(attention_layer, layers, enable_nested_tensor=False)
@@ -50,6 +54,9 @@ class Encoder(nn.Module):
         camera_tokens = inputs.get('camera_tokens')
         if camera_tokens is not None:
             encoded_camera, camera_mask = self.camera_encoder(camera_tokens.long())
+            cam_enriched, _ = self.camera_cross_attn(
+                encoded_actors, encoded_camera, encoded_camera, key_padding_mask=camera_mask)
+            encoded_actors = self.camera_cross_norm(encoded_actors + cam_enriched)
         else:
             encoded_camera = None
 
