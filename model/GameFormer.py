@@ -12,9 +12,9 @@ class Encoder(nn.Module):
         self.lane_encoder = LaneEncoder()
         self.crosswalk_encoder = CrosswalkEncoder()
         # Camera tokens
-        self.camera_encoder = CameraTokenEncoder()
-        self.camera_cross_attn = nn.MultiheadAttention(dim, heads, dropout=dropout, batch_first=True)
-        self.camera_cross_norm = nn.LayerNorm(dim)
+        # self.camera_encoder = CameraTokenEncoder()
+        # self.camera_cross_attn = nn.MultiheadAttention(dim, heads, dropout=dropout, batch_first=True)
+        # self.camera_cross_norm = nn.LayerNorm(dim)
 
         attention_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=dim*4,
                                                      activation=F.gelu, dropout=dropout, batch_first=True)
@@ -51,14 +51,14 @@ class Encoder(nn.Module):
         encoded_map_crosswalks = self.crosswalk_encoder(map_crosswalks)
 
         # camera encoding (scene-level, shared across agents)
-        camera_tokens = inputs.get('camera_tokens')
-        if camera_tokens is not None:
-            encoded_camera, camera_mask = self.camera_encoder(camera_tokens.long())
-            cam_enriched, _ = self.camera_cross_attn(
-                encoded_actors, encoded_camera, encoded_camera, key_padding_mask=camera_mask)
-            encoded_actors = self.camera_cross_norm(encoded_actors + cam_enriched)
-        else:
-            encoded_camera = None
+        # camera_tokens = inputs.get('camera_tokens')
+        # if camera_tokens is not None:
+        #     encoded_camera, camera_mask = self.camera_encoder(camera_tokens.long())
+        #     cam_enriched, _ = self.camera_cross_attn(
+        #         encoded_actors, encoded_camera, encoded_camera, key_padding_mask=camera_mask)
+        #     encoded_actors = self.camera_cross_norm(encoded_actors + cam_enriched)
+        # else:
+        #     encoded_camera = None
 
         # attention fusion
         encodings = []
@@ -69,12 +69,14 @@ class Encoder(nn.Module):
         for i in range(N):
             lanes, lanes_mask = self.segment_map(map_lanes[:, i], encoded_map_lanes[:, i])
             crosswalks, crosswalks_mask = self.segment_map(map_crosswalks[:, i], encoded_map_crosswalks[:, i])
-            if encoded_camera is not None:
-                fusion_input = torch.cat([encoded_actors, lanes, crosswalks, encoded_camera], dim=1)
-                mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask, camera_mask], dim=1)
-            else:
-                fusion_input = torch.cat([encoded_actors, lanes, crosswalks], dim=1)
-                mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask], dim=1)
+            # if encoded_camera is not None:
+            #     fusion_input = torch.cat([encoded_actors, lanes, crosswalks, encoded_camera], dim=1)
+            #     mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask, camera_mask], dim=1)
+            # else:
+            #     fusion_input = torch.cat([encoded_actors, lanes, crosswalks], dim=1)
+            #     mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask], dim=1)
+            fusion_input = torch.cat([encoded_actors, lanes, crosswalks], dim=1)
+            mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask], dim=1)
             masks.append(mask)
             encoding = self.fusion_encoder(fusion_input, src_key_padding_mask=mask)
             encodings.append(encoding)

@@ -89,7 +89,7 @@ def validation_epoch(valid_data, model, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
-            'camera_tokens': batch[7].to(args.local_rank)
+            # 'camera_tokens': batch[7].to(args.local_rank)
         }
 
         ego_future = batch[4].to(args.local_rank)
@@ -175,14 +175,16 @@ def main():
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     # define optimizer and loss function
-    camera_names = 'camera_encoder', 'camera_cross_attn', 'camera_cross_norm'
-    camera_params = [p for n, p in model.named_parameters() if any(c in n for c in camera_names)]
-    other_params = [p for n, p in model.named_parameters() if not any(c in n for c in camera_names)]
+    # camera_names = 'camera_encoder', 'camera_cross_attn', 'camera_cross_norm'
+    # camera_params = [p for n, p in model.named_parameters() if any(c in n for c in camera_names)]
+    # other_params = [p for n, p in model.named_parameters() if not any(c in n for c in camera_names)]
 
-    optimizer = optim.AdamW([
-        {'params': other_params, 'lr': args.learning_rate},
-        {'params': camera_params, 'lr': args.learning_rate * 5}
-    ])
+    # optimizer = optim.AdamW([
+    #     {'params': other_params, 'lr': args.learning_rate},
+    #     {'params': camera_params, 'lr': args.learning_rate * 5}
+    # ])
+
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
 
 
     scheduler = optim.lr_scheduler.MultiStepLR(
