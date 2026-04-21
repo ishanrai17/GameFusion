@@ -180,10 +180,10 @@ def main():
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     # define optimizer and loss function
-    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.MultiStepLR(
                                             optimizer, 
-                                            milestones=[20, 22, 24, 26, 28], 
+                                            milestones=[6, 10, 13], 
                                             gamma=0.5,
                                             verbose=True)
     

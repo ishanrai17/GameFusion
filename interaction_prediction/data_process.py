@@ -485,7 +485,8 @@ class DataProcess(object):
                         self.sdc_ids_list = [(tracks_list,1)] 
                 else:
                     self.interactive_process(tracks_list, interact_list, parsed_data.tracks)
-
+                
+                # here we collect data for all the interesting pairs, including both interactive pairs and non-interactive pairs. The label of interactive pairs is 1 while the label of non-interactive pairs is 0.
                 for pairs in self.sdc_ids_list:
                     sdc_ids, interesting = pairs[0], pairs[1]                   
                     # process data

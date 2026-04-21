@@ -453,13 +453,13 @@ def parallel_process(root_dir):
     
 def merge_sensors_with_scenario_wrapper(processor, shards_path, split_type):
     print("\nMerging sensors with scenario...")
-    if split_type == 'testing':
+    if split_type == 'test':
         split_type = "validation"
         shard_id = "00001-of-00150"
     elif split_type == 'validation':
         shard_id = "00000-of-00150"
     else:
-        split_type = 'training'
+        split_type = 'train'
         shard_id = "00000-of-01000"
     cmd = [
             "gsutil", "-m", "cp",
@@ -489,7 +489,7 @@ def main():
     parser.add_argument('--use_multiprocessing', action="store_true", help='use multiprocessing', default=False)
     parser.add_argument('--ignore_vectorized_data', action="store_true", help='ignore vector data', default=False)
     parser.add_argument('--ignore_lidar_bev', action="store_true", help='ignore lidar bev', default=False)
-    parser.add_argument('--split_type', type=str, help='type of split to use', default='training')
+    parser.add_argument('--split_type', type=str, help='type of split to use', default='train')
     args = parser.parse_args()
         
     data_files = glob.glob(args.load_path+'/*')
