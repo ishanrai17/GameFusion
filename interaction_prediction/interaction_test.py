@@ -286,7 +286,7 @@ def interaction_test():
 
             processor.build_map(parsed_data.map_features, parsed_data.dynamic_map_states)
 
-            for curr_t in range(10, len(timesteps)-50, 5):
+            for curr_t in range(10, len(timesteps)-80, 5):
                 logging.info(f"Testing timestep: {curr_t}")
                 scenario_ids.append(f'{scenario_id}_{curr_t}')
                 
@@ -298,10 +298,9 @@ def interaction_test():
                 else:
                     obs, neighbor_ids, gt_future = data
 
-                # ─── ADD THIS LINE ──────────────────────────────────────────
+               
                 # Force the visualizer to use the ID of the injected agent
                 neighbor_ids = [sdc_ids[1]]
-                # ────────────────────────────────────────────────────────────
                 
                 inputs = {
                     'ego_state': torch.from_numpy(obs['ego_state']).unsqueeze(0).to(args.device),
