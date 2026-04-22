@@ -11,7 +11,7 @@ class Encoder(nn.Module):
         self.ego_encoder = AgentEncoder()
         self.lane_encoder = LaneEncoder()
         self.crosswalk_encoder = CrosswalkEncoder()
-        self.lidar_encoder = LiDAREncoder1()
+        self.lidar_encoder = LiDAREncoder2()
         attention_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=dim*4,
                                                      activation=F.gelu, dropout=dropout, batch_first=True)
         self.fusion_encoder = nn.TransformerEncoder(attention_layer, layers, enable_nested_tensor=False)
@@ -52,10 +52,10 @@ class Encoder(nn.Module):
         lidar_bev = inputs['lidar_bev']
         # (B, 16, 256)                    
         encoded_lidar = self.lidar_encoder(lidar_bev)
-        
+        lidar_tokens = encoded_lidar.shape[1]   
         # lidar mask
         lidar_mask = (lidar_bev.sum(dim=(1,2,3,4))==0)
-        lidar_mask = lidar_mask.unsqueeze(1).expand(-1, 16)
+        lidar_mask = lidar_mask.unsqueeze(1).expand(-1, lidar_tokens)
 
         # attention fusion
         encodings = []

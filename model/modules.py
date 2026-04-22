@@ -257,13 +257,14 @@ class LiDAREncoder2(nn.Module):
         self.conv1 = nn.Conv3d(12, 64, kernel_size=3, stride=(2, 4, 4), padding=1)   
         self.conv2 = nn.Conv3d(64, 128, kernel_size=3, stride=(2, 4, 4), padding=1)  
         self.conv3 = nn.Conv3d(128, 256, kernel_size=3, stride=(3, 4, 4), padding=0)
-        
+        self.dropout =nn.Dropout(0.2)
         self.fnn_block = nn.Linear(256, 256)
 
     def forward(self, inputs):
         x = nn.ReLU()(self.conv1(inputs))
         x = nn.ReLU()(self.conv2(x))
         x = nn.ReLU()(self.conv3(x))
+        x = self.dropout(x)
         x = x.flatten(2).transpose(1, 2)
         x = self.fnn_block(x)
         return x
@@ -288,5 +289,12 @@ class LiDAREncoder4(nn.Module):
         super(LiDAREncoder4, self).__init__()
         pass
 
-    def forward(self, inputs):
-        pass
+    def forward(self, x):
+        # x comes as (B, 12, 11, 300, 300) from dataloader (C, T, H, W)
+        x = x.permute(0, 2, 1, 3, 4)     # → (B, 11, 12, 300, 300) = (B, T, C, H, W)
+        B, T, C, H, W = x.shape
+        x = x.reshape(B * T, C, H, W)     # (B*11, 12, 300, 300)
+        feats = self.cnn(x)               # (B*11, 512)
+        feats = feats.view(B, T, -1)      # (B, 11, 512)
+        out, _ = self.lstm(feats)          # (B, 11, 256)
+        return out
