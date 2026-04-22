@@ -154,7 +154,7 @@ def validation_epoch(valid_data, model, epoch):
 
 def main():
 
-    log_path = f"./training_log/{args.name}/"
+    log_path = f"/content/drive/MyDrive/PRCV/training_log/{args.name}/"
     os.makedirs(log_path, exist_ok=True)
     initLogging(log_file=log_path+'train.log')
 
@@ -240,18 +240,17 @@ def main():
 
         train_loss = training_epoch(train_data, model, optimizer, epoch)
         valid_metrics, val_loss = validation_epoch(valid_data, model, epoch)
-        test_metrics, test_loss = validation_epoch(test_data, model, epoch)
+        # test_metrics, test_loss = validation_epoch(test_data, model, epoch)
 
         # save to training log
         log = {
             'epoch': epoch+1, 
-            'train_loss': np.mean(train_loss), 'val_loss': np.mean(val_loss), 
-            'test_loss': np.mean(test_loss),
+            'train_loss': np.mean(train_loss), 'val_loss': np.mean(val_loss),
             'lr': optimizer.param_groups[0]['lr']
             }
 
         log.update(valid_metrics)
-        log.update(test_metrics)
+        # log.update(test_metrics)
 
         if dist.get_rank() == 0:
             # log & save
