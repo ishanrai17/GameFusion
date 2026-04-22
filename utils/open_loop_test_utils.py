@@ -94,8 +94,8 @@ def trajectory_smoothing(trajectory):
 
 def _plot_ground_truth(gt_trajectories):
     for i, traj in enumerate(gt_trajectories):
-        # Draw solid faint white lines for ground truth
-        plt.plot(traj[:, 0], traj[:, 1], color='#f8fafc', lw=2.5, alpha=0.8, solid_capstyle='round', zorder=4)
+        # Draw bold, bright green lines for ground truth so it pops against the white lanes
+        plt.plot(traj[:, 0], traj[:, 1], color='#22c55e', lw=3.5, alpha=1.0, solid_capstyle='round', zorder=4)
 
 # Add 'gt_trajectories' right after 'trajectories'
 def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents, trajectories, gt_trajectories, name, scenario_id, save=False):
@@ -122,10 +122,12 @@ def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents,
              ha='right', va='top', bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=5), zorder=10)
 
     # 2. Custom Legend (Top Left, matching dark mode aesthetic)
+    # 2. Custom Legend (Top Left, matching dark mode aesthetic)
     legend_elements = [
-        Line2D([0], [0], marker='o', color='w', label='Ego Prediction', markerfacecolor='#06b6d4', markersize=9, linestyle='None'),
+        # Changed markerfacecolor to bright red!
+        Line2D([0], [0], marker='o', color='w', label='Ego Prediction', markerfacecolor='#ef4444', markersize=9, linestyle='None'),
         Line2D([0], [0], marker='o', color='w', label='Target Prediction', markerfacecolor='#eab308', markersize=9, linestyle='None'),
-        Line2D([0], [0], color='#f8fafc', lw=3.0, label='Ground Truth (Actual)')
+        Line2D([0], [0], color='#22c55e', lw=3.5, label='Ground Truth (Actual)')
     ]
     
     plt.gca().legend(handles=legend_elements, loc='upper left', framealpha=0.6, facecolor='#0f172a', 
@@ -133,7 +135,8 @@ def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents,
                      
     # ────────────────────────────────────────────────────────────────────────
 
-    plt.gca().set_facecolor('silver')
+   
+    plt.gca().set_facecolor('#64748b')
     plt.gca().margins(0)  
     plt.gca().set_aspect('equal')
     plt.gca().axes.get_yaxis().set_visible(False)
@@ -159,7 +162,7 @@ def _plot_agents(tracks, timestep, sdc_id, predict_ids):
             pos_x, pos_y = state.center_x, state.center_y
             length, width = state.length, state.width
 
-            if id in predict_ids:
+            """if id in predict_ids:
                 color = '#eab308' # NEIGHBOR: Waymax Yellow/Orange
                 zorder = 4
             elif id == sdc_id:
@@ -167,7 +170,18 @@ def _plot_agents(tracks, timestep, sdc_id, predict_ids):
                 zorder = 4
             else:
                 color = '#64748b' # BACKGROUND AGENTS: Muted Gray
-                zorder = 3
+                zorder = 3"""
+				
+            # Determine vehicle color based on its ID
+            if id == sdc_id:
+              color = 'white'      # Ego Vehicle
+              zorder = 10         # Draw Ego on top
+            elif id in predict_ids:
+              color = '#eab308'    # Target Vehicle (Yellow to match legend)
+              zorder = 9          # Draw Target just below Ego
+            else:
+              color = 'black'      # Background Neighbors
+              zorder = 8          # Draw background cars lowest
 
             rect = plt.Rectangle((pos_x - length/2, pos_y - width/2), length, width, linewidth=2, color=color, alpha=0.9, zorder=zorder,
                                  transform=mpl.transforms.Affine2D().rotate_around(*(pos_x, pos_y), state.heading) + plt.gca().transData)
@@ -176,15 +190,12 @@ def _plot_agents(tracks, timestep, sdc_id, predict_ids):
 
 def _plot_trajectories(trajectories):
     for i, traj in enumerate(trajectories):
-        # Dynamically scale colors to match trajectory length
-        z = np.linspace(8, 0, traj.shape[0])
-        
         if i == 0:
-            # EGO: 'cool' colormap matches the Cyan/Blue aesthetic
-            plt.scatter(traj[:, 0], traj[:, 1], c=z, cmap='cool', alpha=0.9, s=15, zorder=5)
+            # Ego Prediction -> Red to match the legend
+            plt.scatter(traj[:, 0], traj[:, 1], c='#ef4444', s=15, zorder=5)
         else:
-            # NEIGHBOR: 'Wistia' colormap matches the Yellow/Orange aesthetic
-            plt.scatter(traj[:, 0], traj[:, 1], c=z, cmap='Wistia', alpha=0.9, s=15, zorder=5)
+            # Target Prediction -> Yellow to match the legend
+            plt.scatter(traj[:, 0], traj[:, 1], c='#eab308', s=15, zorder=5)
 
 
 def _plot_map_features(map_features):
