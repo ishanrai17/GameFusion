@@ -125,7 +125,7 @@ class CameraTokenEncoder(nn.Module):
         c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))
         x = x + t_emb[None, :, None, None, :] + c_emb[None, None, :, None, :]
         x = self.spatial_net(x)                                         # (B, T, C, N, D)
-        x = F.dropout(x, p=0.3, training=self.training)
+        # x = F.dropout(x, p=0.3, training=self.training)
 
         # spatial: learned gated pooling over N tokens
         token_mask = (tokens == 0).unsqueeze(-1)                        # (B, T, C, N, 1)
