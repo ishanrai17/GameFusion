@@ -204,7 +204,7 @@ class DataProcess(object):
                         break             
 
             # scale the lane
-            vectorized_map[i] = cache_lane[np.linspace(0, added_points, num=300, endpoint=False, dtype=np.int)]
+            vectorized_map[i] = cache_lane[np.linspace(0, added_points, num=300, endpoint=False, dtype=int)]
           
             # count
             added_lanes += 1
@@ -218,7 +218,7 @@ class DataProcess(object):
         for _, crosswalk in self.crosswalks.items():
             polygon = Polygon([(point.x, point.y) for point in crosswalk.polygon])
             polyline = polygon_completion(crosswalk.polygon)
-            polyline = polyline[np.linspace(0, polyline.shape[0], num=100, endpoint=False, dtype=np.int)]
+            polyline = polyline[np.linspace(0, polyline.shape[0], num=100, endpoint=False, dtype=int)]
 
             if detection.intersects(polygon):
                 vectorized_crosswalks[added_cross_walks, :polyline.shape[0]] = polyline
