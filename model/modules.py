@@ -92,11 +92,19 @@ class CrosswalkEncoder(nn.Module):
     
 
 class CameraTokenEncoder(nn.Module):
-    def __init__(self, vocab_size=8193, embed_dim=128, output_dim=256, num_steps=11, num_cameras=8):
+    def __init__(self, codebook_path="/content/womd_camera_codebook.npy", output_dim=256, num_steps=11, num_cameras=8):
         super(CameraTokenEncoder, self).__init__()
         self.num_steps = num_steps
         self.num_cameras = num_cameras
-        self.token_embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+
+        # load pretrained codebook (8192, 32) and prepend a zero row for padding_idx=0
+        codebook = np.load(codebook_path)
+        embed_dim = codebook.shape[1]  # 32
+        codebook = np.vstack([np.zeros((1, embed_dim)), codebook])
+        self.token_embedding = nn.Embedding.from_pretrained(
+            torch.FloatTensor(codebook), freeze=True, padding_idx=0
+        )
+
         self.temporal_embedding = nn.Embedding(num_steps, embed_dim)
         self.camera_embedding = nn.Embedding(num_cameras, embed_dim)
         self.spatial_net = nn.Sequential(nn.Linear(embed_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
