@@ -200,14 +200,14 @@ def main():
     # datasets:
     train_dataset = DrivingData(args.train_set+'/*')
     valid_dataset = DrivingData(args.valid_set+'/*')
-    test_dataset = DrivingData(args.test_set+'/*')
+    # test_dataset = DrivingData(args.test_set+'/*')
 
     training_size = len(train_dataset)
     valid_size = len(valid_dataset)
-    test_size = len(test_dataset)
+    # test_size = len(test_dataset)
 
     if dist.get_rank() == 0:
-        logging.info(f'Length train: {training_size}; Valid: {valid_size}; Test: {test_size}')
+        logging.info(f'Length train: {training_size}; Valid: {valid_size}')
 
     train_sampler = DistributedSampler(train_dataset)
     valid_sampler = DistributedSampler(valid_dataset, shuffle=False)
@@ -219,10 +219,10 @@ def main():
         valid_dataset, batch_size=args.batch_size,
         sampler=valid_sampler, num_workers=args.workers
         )
-    test_data = DataLoader(
-        test_dataset, batch_size=args.batch_size,
-        sampler=DistributedSampler(test_dataset, shuffle=False), num_workers=args.workers
-        )
+    # test_data = DataLoader(
+    #     test_dataset, batch_size=args.batch_size,
+    #     sampler=DistributedSampler(test_dataset, shuffle=False), num_workers=args.workers
+    #     )
 
     #start training:
     epochs = args.training_epochs
@@ -236,7 +236,7 @@ def main():
 
         train_data.sampler.set_epoch(epoch)
         valid_data.sampler.set_epoch(epoch)
-        test_data.sampler.set_epoch(epoch)
+        # test_data.sampler.set_epoch(epoch)
 
         train_loss = training_epoch(train_data, model, optimizer, epoch)
         valid_metrics, val_loss = validation_epoch(valid_data, model, epoch)

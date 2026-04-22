@@ -139,19 +139,26 @@ class InteractionPredictionTestProcessor(DataProcess):
             ego, neighbors, agent_map_lanes, agent_map_crosswalk, ground_truth, viz=False)
             
         # 5. Repackage shapes to match GameFormer's expectations
-        final_ego = ego[0] 
-        final_neighbors = np.zeros_like(neighbors)
-        final_neighbors[0] = ego[1] # Inject the interacting agent into the first neighbor slot
+        target_id = sdc_ids[1]
+        target_idx = -1
         
-        if self.num_neighbors > 1:
-            final_neighbors[1:] = neighbors[:-1]
+        # Find where the target is hiding in the background neighbors
+        for i, n_id in enumerate(neighbors_to_predict):
+            if n_id == target_id:
+                target_idx = i
+                break
+                
+        # Swap it to index 0 safely (preserving relative coordinates!)
+        if target_idx != -1 and target_idx != 0:
+            neighbors[[0, target_idx]] = neighbors[[target_idx, 0]]
+            neighbors_to_predict[0], neighbors_to_predict[target_idx] = neighbors_to_predict[target_idx], neighbors_to_predict[0]
 
         obs = {
-            'ego_state': final_ego, 
-            'neighbors_state': final_neighbors, 
+            'ego_state': ego[0], 
+            'neighbors_state': neighbors, 
             'map_lanes': agent_map_lanes, 
             'map_crosswalks': agent_map_crosswalk
-        }  
+        }
 
         # Conditional LiDAR Processing
         if self.include_lidar:
@@ -291,6 +298,11 @@ def interaction_test():
                 else:
                     obs, neighbor_ids, gt_future = data
 
+                # ─── ADD THIS LINE ──────────────────────────────────────────
+                # Force the visualizer to use the ID of the injected agent
+                neighbor_ids = [sdc_ids[1]]
+                # ────────────────────────────────────────────────────────────
+                
                 inputs = {
                     'ego_state': torch.from_numpy(obs['ego_state']).unsqueeze(0).to(args.device),
                     'neighbors_state': torch.from_numpy(obs['neighbors_state']).unsqueeze(0).to(args.device),
@@ -375,7 +387,8 @@ def interaction_test():
                     }
 
                     # 6. Actually draw and save the frame! (Passing the new global_gt_trajectories)
-                    plot_scenario(curr_t, sdc_ids, neighbor_ids, map_features_dict, ego_xyh, 
+                   # Pass sdc_ids[0] so the visualizer knows exactly which car is the Ego!
+                    plot_scenario(curr_t, sdc_ids[0], neighbor_ids, map_features_dict, ego_xyh, 
                                   parsed_data.tracks, global_pred_trajectories, global_gt_trajectories, args.name, scenario_id, args.save)
 
             # GIF Compilation Block
@@ -393,7 +406,7 @@ def interaction_test():
                     frames[0].save(gif_path, format='GIF', append_images=frames[1:], save_all=True, duration=200, loop=0)
                     logging.info(f"Successfully saved scenario GIF: {gif_path}")
 
-            break
+            
             
         if valid_scenarios_in_file == 0:
             logging.warning(f"File {file} processed, but yielded 0 valid interacting scenarios.")
