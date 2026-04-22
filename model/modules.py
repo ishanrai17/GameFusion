@@ -103,12 +103,15 @@ class CameraTokenEncoder(nn.Module):
         embed_dim = codebook.shape[1]  # 32
         codebook = np.vstack([np.zeros((1, embed_dim)), codebook])
         self.token_embedding = nn.Embedding.from_pretrained(
-            torch.FloatTensor(codebook), freeze=True, padding_idx=0
+            torch.FloatTensor(codebook), freeze=False, padding_idx=0
         )
 
-        self.temporal_embedding = nn.Embedding(num_steps, embed_dim)
-        self.camera_embedding = nn.Embedding(num_cameras, embed_dim)
-        self.spatial_net = nn.Sequential(nn.Linear(embed_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
+        projected_dim = 128
+        self.codebook_proj = nn.Linear(embed_dim, 128)
+
+        self.temporal_embedding = nn.Embedding(num_steps, projected_dim)
+        self.camera_embedding = nn.Embedding(num_cameras, projected_dim)
+        self.spatial_net = nn.Sequential(nn.Linear(projected_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
 
         # lightweight learned pooling
         self.spatial_gate = nn.Linear(output_dim, 1)
@@ -130,6 +133,7 @@ class CameraTokenEncoder(nn.Module):
 
         # embed tokens and add positional embeddings
         x = self.token_embedding(tokens)
+        x = self.codebook_proj(x)
         t_emb = self.temporal_embedding(torch.arange(T, device=tokens.device))
         c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))
         x = x + t_emb[None, :, None, None, :] + c_emb[None, None, :, None, :]
