@@ -81,13 +81,24 @@ def trajectory_smoothing(trajectory):
     y = trajectory[:,1]
 
     window_length = 25
-    x = signal.savgol_filter(x, window_length=window_length, polyorder=3)
-    y = signal.savgol_filter(y, window_length=window_length, polyorder=3)
+    
+    # Safety check to prevent errors if the trajectory is shorter than the window length
+    if len(trajectory) < window_length:
+        window_length = len(trajectory) if len(trajectory) % 2 != 0 else len(trajectory) - 1
+        
+    if window_length > 3:
+        x = signal.savgol_filter(x, window_length=window_length, polyorder=3)
+        y = signal.savgol_filter(y, window_length=window_length, polyorder=3)
    
     return np.column_stack([x, y])
 
+def _plot_ground_truth(gt_trajectories):
+    for i, traj in enumerate(gt_trajectories):
+        # Draw solid faint white lines for ground truth
+        plt.plot(traj[:, 0], traj[:, 1], color='#f8fafc', lw=2.5, alpha=0.8, solid_capstyle='round', zorder=4)
 
-def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents, trajectories, name, scenario_id, save=False):
+# Add 'gt_trajectories' right after 'trajectories'
+def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents, trajectories, gt_trajectories, name, scenario_id, save=False):
     plt.ion()
     fig = plt.gcf()
     dpi = 100
@@ -98,8 +109,29 @@ def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents,
 
     _plot_map_features(map_features)
     _plot_traffic_signals(map_features['dynamic_map_states'][timestep])
+    
+    _plot_ground_truth(gt_trajectories)
     _plot_trajectories(trajectories)
     _plot_agents(agents, timestep, sdc_id, predict_ids)
+
+    # ─── NEW: LEGEND AND TIMESTEP LABELS ─────────────────────────────────────
+    
+    # 1. Timestep Display (Top Right, semi-transparent black box)
+    plt.text(0.97, 0.97, f"Timestep: {timestep}", 
+             transform=plt.gca().transAxes, fontsize=14, fontweight='bold', color='white', 
+             ha='right', va='top', bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=5), zorder=10)
+
+    # 2. Custom Legend (Top Left, matching dark mode aesthetic)
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Ego Prediction', markerfacecolor='#06b6d4', markersize=9, linestyle='None'),
+        Line2D([0], [0], marker='o', color='w', label='Target Prediction', markerfacecolor='#eab308', markersize=9, linestyle='None'),
+        Line2D([0], [0], color='#f8fafc', lw=3.0, label='Ground Truth (Actual)')
+    ]
+    
+    plt.gca().legend(handles=legend_elements, loc='upper left', framealpha=0.6, facecolor='#0f172a', 
+                     edgecolor='none', labelcolor='white', fontsize=12, prop={'weight':'bold'})
+                     
+    # ────────────────────────────────────────────────────────────────────────
 
     plt.gca().set_facecolor('silver')
     plt.gca().margins(0)  
@@ -111,7 +143,7 @@ def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents,
     if save:
         save_path = f"./testing_log/{name}/visualizations"
         os.makedirs(save_path, exist_ok=True)
-        plt.savefig(f'{save_path}/{scenario_id}_{timestep}.svg')
+        plt.savefig(f'{save_path}/{scenario_id}_{timestep}.png', bbox_inches='tight')
     else:
         plt.pause(1)
 
@@ -128,34 +160,39 @@ def _plot_agents(tracks, timestep, sdc_id, predict_ids):
             length, width = state.length, state.width
 
             if id in predict_ids:
-                color = 'm'
+                color = '#eab308' # NEIGHBOR: Waymax Yellow/Orange
+                zorder = 4
             elif id == sdc_id:
-                color = 'r' 
+                color = '#06b6d4' # EGO: Waymax Cyan
+                zorder = 4
             else:
-                color = 'k'
+                color = '#64748b' # BACKGROUND AGENTS: Muted Gray
+                zorder = 3
 
-            rect = plt.Rectangle((pos_x - length/2, pos_y - width/2), length, width, linewidth=2, color=color, alpha=0.9, zorder=3,
-                                  transform=mpl.transforms.Affine2D().rotate_around(*(pos_x, pos_y), state.heading) + plt.gca().transData)
+            rect = plt.Rectangle((pos_x - length/2, pos_y - width/2), length, width, linewidth=2, color=color, alpha=0.9, zorder=zorder,
+                                 transform=mpl.transforms.Affine2D().rotate_around(*(pos_x, pos_y), state.heading) + plt.gca().transData)
             plt.gca().add_patch(rect)
 
 
 def _plot_trajectories(trajectories):
-    traj = trajectories[0]
-    z = np.linspace(8, 0, 51)
- 
     for i, traj in enumerate(trajectories):
+        # Dynamically scale colors to match trajectory length
+        z = np.linspace(8, 0, traj.shape[0])
+        
         if i == 0:
-            plt.scatter(traj[:, 0], traj[:, 1], c=z, cmap='autumn', alpha=0.8, zorder=2)
+            # EGO: 'cool' colormap matches the Cyan/Blue aesthetic
+            plt.scatter(traj[:, 0], traj[:, 1], c=z, cmap='cool', alpha=0.9, s=15, zorder=5)
         else:
-            plt.scatter(traj[:, 0], traj[:, 1], c=z, cmap='winter', alpha=0.8, zorder=2)
+            # NEIGHBOR: 'Wistia' colormap matches the Yellow/Orange aesthetic
+            plt.scatter(traj[:, 0], traj[:, 1], c=z, cmap='Wistia', alpha=0.9, s=15, zorder=5)
 
 
 def _plot_map_features(map_features):
-    for lane in map_features["lane"].values():
+    for lane in map_features.get("lane", {}).values():
         pts = np.array([[p.x, p.y] for p in lane.polyline])
         plt.plot(pts[:, 0], pts[:, 1], linestyle=":", color="gray", linewidth=2)
 
-    for road_line in map_features["road_line"].values():
+    for road_line in map_features.get("road_line", {}).values():
         pts = np.array([[p.x, p.y] for p in road_line.polyline])
         if road_line.type == 1:
             plt.plot(pts[:, 0], pts[:, 1], 'w', linestyle='dashed', linewidth=2)
@@ -176,27 +213,30 @@ def _plot_map_features(map_features):
         else:
             plt.plot(pts[:, 0], pts[:, 1], 'k', linewidth=2)
 
-    for road_edge in map_features["road_edge"].values():
+    for road_edge in map_features.get("road_edge", {}).values():
         pts = np.array([[p.x, p.y] for p in road_edge.polyline])
         plt.plot(pts[:, 0], pts[:, 1], "k-", linewidth=2)
 
-    for crosswalk in map_features["crosswalk"].values():
+    for crosswalk in map_features.get("crosswalk", {}).values():
         poly_points = [[p.x, p.y] for p in crosswalk.polygon]
         poly_points.append(poly_points[0])
         pts = np.array(poly_points)
         plt.plot(pts[:, 0], pts[:, 1], 'b:', linewidth=2)
 
-    for speed_bump in map_features["speed_bump"].values():
+    for speed_bump in map_features.get("speed_bump", {}).values():
         poly_points = [[p.x, p.y] for p in speed_bump.polygon]
         poly_points.append(poly_points[0])
         pts = np.array(poly_points)
         plt.plot(pts[:, 0], pts[:, 1], 'xkcd:orange', linewidth=2)
 
-    for stop_sign in map_features["stop_sign"].values():
+    for stop_sign in map_features.get("stop_sign", {}).values():
         plt.scatter(stop_sign.position.x, stop_sign.position.y, marker="8", s=100, c="red")
 
 
 def _plot_traffic_signals(dynamic_map_features):
+    if not hasattr(dynamic_map_features, 'lane_states'):
+        return
+        
     for lane_state in dynamic_map_features.lane_states:
         stop_point = lane_state.stop_point
 
@@ -307,12 +347,17 @@ def check_agent_prediction(trajs, gt):
     FDE = []
     mask = np.not_equal(gt[:, :, :2], 0)
 
-    for i in range(10):
+    # Dynamically loop over the number of agents provided
+    for i in range(gt.shape[0]):
         if mask[i, 0, 0]:
             error = np.linalg.norm(trajs[i, :, :2] - gt[i, :, :2], axis=-1) 
             error = error * mask[i, :, 0]
             ADE.append(np.mean(error))
             FDE.append(error[-1])
+
+    # Safety catch
+    if len(ADE) == 0:
+        return 0.0, 0.0
 
     return np.mean(ADE), np.mean(FDE)
 
