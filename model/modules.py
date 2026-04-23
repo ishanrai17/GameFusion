@@ -125,8 +125,6 @@ class CameraTokenEncoder(nn.Module):
 
         # zero-init output so camera branch starts as no-op
         self.out_proj = nn.Linear(output_dim, output_dim)
-        nn.init.zeros_(self.out_proj.weight)
-        nn.init.zeros_(self.out_proj.bias)
 
     def forward(self, tokens):
         B, T, C, N = tokens.shape
