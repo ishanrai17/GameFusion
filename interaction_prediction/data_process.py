@@ -204,7 +204,7 @@ class DataProcess(object):
                         break             
 
             # scale the lane
-            vectorized_map[i] = cache_lane[np.linspace(0, added_points, num=300, endpoint=False, dtype=np.int)]
+            vectorized_map[i] = cache_lane[np.linspace(0, added_points, num=300, endpoint=False, dtype=int)]
           
             # count
             added_lanes += 1
@@ -218,7 +218,7 @@ class DataProcess(object):
         for _, crosswalk in self.crosswalks.items():
             polygon = Polygon([(point.x, point.y) for point in crosswalk.polygon])
             polyline = polygon_completion(crosswalk.polygon)
-            polyline = polyline[np.linspace(0, polyline.shape[0], num=100, endpoint=False, dtype=np.int)]
+            polyline = polyline[np.linspace(0, polyline.shape[0], num=100, endpoint=False, dtype=int)]
 
             if detection.intersects(polygon):
                 vectorized_crosswalks[added_cross_walks, :polyline.shape[0]] = polyline
@@ -485,7 +485,8 @@ class DataProcess(object):
                         self.sdc_ids_list = [(tracks_list,1)] 
                 else:
                     self.interactive_process(tracks_list, interact_list, parsed_data.tracks)
-
+                
+                # here we collect data for all the interesting pairs, including both interactive pairs and non-interactive pairs. The label of interactive pairs is 1 while the label of non-interactive pairs is 0.
                 for pairs in self.sdc_ids_list:
                     sdc_ids, interesting = pairs[0], pairs[1]                   
                     # process data

@@ -31,9 +31,11 @@ class AgentEncoder(nn.Module):
         self.type_emb = nn.Embedding(4, 256, padding_idx=0)
 
     def forward(self, inputs):
+        ## First 8 features as trajectory, last feature as type
         traj, _ = self.motion(inputs[:, :, :8])
         output = traj[:, -1]
         type = self.type_emb(inputs[:, -1, 8].int())
+        ## additive injection
         output = output + type
 
         return output
@@ -230,3 +232,180 @@ class InteractionDecoder(nn.Module):
         trajectories[..., :2] += current_states[:, id, None, None, :2]
 
         return query_content, trajectories, scores
+    
+    
+class LiDAREncoder1(nn.Module):
+    def __init__(self):
+        super(LiDAREncoder1, self).__init__()
+        self.conv1 = nn.Conv3d(12, 64, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv3d(64, 128, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.Conv3d(128, 256, kernel_size=3, stride=2, padding=0)
+        
+        self.fnn_block = nn.Linear(256, 256)
+
+    def forward(self, inputs):
+        x = nn.ReLU()(nn.MaxPool3d(kernel_size=(1,2,2))(self.conv1(inputs)))
+        x = nn.ReLU()(nn.MaxPool3d(kernel_size=(1,2,2))(self.conv2(x)))
+        x = nn.ReLU()(nn.MaxPool3d(kernel_size=(1,2,2))(self.conv3(x)))
+        x = x.flatten(2).transpose(1, 2)
+        x = self.fnn_block(x)
+        return x
+
+class LiDAREncoder2(nn.Module):
+    def __init__(self):
+        super(LiDAREncoder2, self).__init__()
+        self.conv1 = nn.Conv3d(12, 64, kernel_size=3, stride=(2, 4, 4), padding=1)   
+        self.conv2 = nn.Conv3d(64, 128, kernel_size=3, stride=(2, 4, 4), padding=1)  
+        self.conv3 = nn.Conv3d(128, 256, kernel_size=3, stride=(3, 4, 4), padding=0)
+        self.dropout =nn.Dropout(0.2)
+        self.fnn_block = nn.Linear(256, 256)
+
+    def forward(self, inputs):
+        x = nn.ReLU()(self.conv1(inputs))
+        x = nn.ReLU()(self.conv2(x))
+        x = nn.ReLU()(self.conv3(x))
+        x = self.dropout(x)
+        x = x.flatten(2).transpose(1, 2)
+        x = self.fnn_block(x)
+        return x
+
+    
+class LiDAREncoder3(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.cnn = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
+        for param in self.cnn.parameters():
+            param.requires_grad = False
+        for param in self.cnn.layer4.parameters():
+            param.requires_grad = True
+        self.cnn.conv1 = nn.Conv2d(12, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.cnn.fc = nn.Identity()
+        self.lstm = nn.LSTM(512, 256, batch_first=True)
+        self.dropout = nn.Dropout(0.2)
+
+    def forward(self, x):
+        # → (B, 11, 12, 300, 300) = (B, T, C, H, W)
+        x = x.permute(0, 2, 1, 3, 4)     
+        B, T, C, H, W = x.shape
+        # (B*11, 12, 300, 300)
+        x = x.reshape(B * T, C, H, W)   
+        # (B*11, 512) 
+        feats = self.cnn(x)    
+         # (B, 11, 512)           
+        feats = feats.view(B, T, -1) 
+        # (B, 11, 256)
+        feats = self.dropout(feats)    
+        out, _ = self.lstm(feats)          
+        return out
+
+class LiDARVAE(nn.Module):
+    def __init__(self, latent_dim=256):
+        super(LiDARVAE, self).__init__()
+        # Input: [B, 12, 11, 300, 300]
+        self.enc_conv1 = nn.Conv3d(12, 32, kernel_size=(3, 4, 4), stride=(1, 2, 2), padding=(1, 1, 1))
+        self.enc_bn1 = nn.BatchNorm3d(32) # -> [B, 32, 11, 150, 150]
+        
+        self.enc_conv2 = nn.Conv3d(32, 64, kernel_size=(3, 4, 4), stride=(1, 2, 2), padding=(1, 1, 1))
+        self.enc_bn2 = nn.BatchNorm3d(64) # -> [B, 64, 11, 75, 75]
+        
+        self.enc_conv3 = nn.Conv3d(64, 128, kernel_size=(3, 3, 3), stride=(1, 3, 3), padding=(1, 0, 0))
+        self.enc_bn3 = nn.BatchNorm3d(128) # -> [B, 128, 11, 25, 25]
+        
+        self.enc_conv4 = nn.Conv3d(128, 256, kernel_size=(3, 5, 5), stride=(1, 5, 5), padding=(1, 0, 0))
+        self.enc_bn4 = nn.BatchNorm3d(256) # -> [B, 256, 11, 5, 5]
+
+        self.spatial_flat_size = 256 * 5 * 5 # 6400
+        
+        # We process each timestep's spatial features independently into the latent space
+        self.fc_mu = nn.Linear(self.spatial_flat_size, latent_dim)
+        self.fc_logvar = nn.Linear(self.spatial_flat_size, latent_dim)
+        
+        self.fc_decode = nn.Linear(latent_dim, self.spatial_flat_size)
+
+        # Input: [B, 256, 11, 5, 5]
+        self.dec_conv4 = nn.ConvTranspose3d(256, 128, kernel_size=(3, 5, 5), stride=(1, 5, 5), padding=(1, 0, 0))
+        self.dec_bn4 = nn.BatchNorm3d(128) # -> [B, 128, 11, 25, 25]
+        
+        self.dec_conv3 = nn.ConvTranspose3d(128, 64, kernel_size=(3, 3, 3), stride=(1, 3, 3), padding=(1, 0, 0))
+        self.dec_bn3 = nn.BatchNorm3d(64) # -> [B, 64, 11, 75, 75]
+        
+        self.dec_conv2 = nn.ConvTranspose3d(64, 32, kernel_size=(3, 4, 4), stride=(1, 2, 2), padding=(1, 1, 1))
+        self.dec_bn2 = nn.BatchNorm3d(32) # -> [B, 32, 11, 150, 150]
+        
+        self.dec_conv1 = nn.ConvTranspose3d(32, 12, kernel_size=(3, 4, 4), stride=(1, 2, 2), padding=(1, 1, 1))
+        # -> [B, 12, 11, 300, 300]
+
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid() # Use sigmoid to output probabilities for BCE Loss
+    def vae_loss_function(self, reconstructed_x, original_x, mu, logvar):
+        # We use reduction='sum' so it scales properly with the massive 300x300 grid
+        BCE = nn.functional.binary_cross_entropy(reconstructed_x, original_x, reduction='sum')
+        
+        # KL Divergence forces the latent space to be a smooth, continuous distribution
+        # Formula: -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return BCE + KLD
+
+    def encode(self, x):
+        x = self.relu(self.enc_bn1(self.enc_conv1(x)))
+        x = self.relu(self.enc_bn2(self.enc_conv2(x)))
+        x = self.relu(self.enc_bn3(self.enc_conv3(x)))
+        x = self.relu(self.enc_bn4(self.enc_conv4(x)))
+        
+        B, C, T, H, W = x.shape
+        # Permute to [B, T, C, H, W] then flatten spatial dims to [B, T, 6400]
+        x = x.permute(0, 2, 1, 3, 4).contiguous().view(B, T, -1)
+        
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        B, T, _ = z.shape
+        
+        x = self.relu(self.fc_decode(z))
+        # Unflatten back to [B, T, 256, 5, 5] and permute back to [B, 256, T, 5, 5]
+        x = x.view(B, T, 256, 5, 5).permute(0, 2, 1, 3, 4).contiguous()
+        
+        x = self.relu(self.dec_bn4(self.dec_conv4(x)))
+        x = self.relu(self.dec_bn3(self.dec_conv3(x)))
+        x = self.relu(self.dec_bn2(self.dec_conv2(x)))
+        
+        # No ReLU or BN on the final layer, just Sigmoid for reconstruction
+        x = self.sigmoid(self.dec_conv1(x)) 
+        return x
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        reconstruction = self.decode(z)
+        return reconstruction, mu, logvar
+
+    def get_embeddings(self, x):
+        """
+        Call this function when you want to bypass the decoder 
+        and generate the deterministic static tensors for GameFormer.
+        Returns tensor of shape [B, 11, 256]
+        """
+        with torch.no_grad():
+            mu, _ = self.encode(x)
+        return mu
+    
+# class LiDAREncoder3(nn.Module):
+#     def __init__(self):
+#         super(LiDAREncoder3, self).__init__()
+#         self.cnn = nn.Sequential(
+#             nn.Conv2d(12, 32, 3, stride=2, padding=1), nn.ReLU(),
+#             nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.ReLU(),
+#             nn.AdaptiveAvgPool2d(1)
+#         )
+#         self.proj = nn.Linear(64, 256)
+
+#     def forward(self, inputs):
+#         feat = self.cnn(inputs).flatten(1)
+#         return self.proj(feat)
