@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 
 class PositionalEncoding(nn.Module):
@@ -92,14 +93,25 @@ class CrosswalkEncoder(nn.Module):
     
 
 class CameraTokenEncoder(nn.Module):
-    def __init__(self, vocab_size=8193, embed_dim=128, output_dim=256, num_steps=11, num_cameras=8):
+    def __init__(self, codebook_path="/content/womd_camera_codebook.npy", output_dim=256, num_steps=11, num_cameras=8):
         super(CameraTokenEncoder, self).__init__()
         self.num_steps = num_steps
         self.num_cameras = num_cameras
-        self.token_embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.temporal_embedding = nn.Embedding(num_steps, embed_dim)
-        self.camera_embedding = nn.Embedding(num_cameras, embed_dim)
-        self.spatial_net = nn.Sequential(nn.Linear(embed_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
+
+        # load pretrained codebook (8192, 32) and prepend a zero row for padding_idx=0
+        codebook = np.load(codebook_path)
+        embed_dim = codebook.shape[1]  # 32
+        codebook = np.vstack([np.zeros((1, embed_dim)), codebook])
+        self.token_embedding = nn.Embedding.from_pretrained(
+            torch.FloatTensor(codebook), freeze=False, padding_idx=0
+        )
+
+        projected_dim = 128
+        self.codebook_proj = nn.Linear(embed_dim, 128)
+
+        self.temporal_embedding = nn.Embedding(num_steps, projected_dim)
+        self.camera_embedding = nn.Embedding(num_cameras, projected_dim)
+        self.spatial_net = nn.Sequential(nn.Linear(projected_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim))
 
         # lightweight learned pooling
         self.spatial_gate = nn.Linear(output_dim, 1)
@@ -121,6 +133,9 @@ class CameraTokenEncoder(nn.Module):
 
         # embed tokens and add positional embeddings
         x = self.token_embedding(tokens)
+        print(x.shape)
+        print(x)
+        x = self.codebook_proj(x)
         t_emb = self.temporal_embedding(torch.arange(T, device=tokens.device))
         c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))
         x = x + t_emb[None, :, None, None, :] + c_emb[None, None, :, None, :]
