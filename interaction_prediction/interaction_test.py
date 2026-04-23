@@ -168,10 +168,7 @@ def interaction_test():
                 continue
                 
             scenario_id = parsed_data.scenario_id
-
-            if scenario_id not in ["f20c19cddd9753f9", "b5dfb7b0dde48b14", "d87ed8e5f9895aa1", "fbedbec089659222", "b1e5a34520fe6043", "b063065d55a07d22"]:
-              continue
-
+            
             if len(parsed_data.tracks) == 0 or len(parsed_data.map_features) == 0:
                 logging.warning(f"Scenario {scenario_id} is missing critical tracks or map features. Skipping.")
                 continue
