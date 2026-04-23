@@ -286,7 +286,7 @@ def interaction_test():
 
             processor.build_map(parsed_data.map_features, parsed_data.dynamic_map_states)
 
-            for curr_t in range(10, len(timesteps)-80, 5):
+            for curr_t in range(10, len(timesteps)-50, 5):
                 logging.info(f"Testing timestep: {curr_t}")
                 scenario_ids.append(f'{scenario_id}_{curr_t}')
                 
