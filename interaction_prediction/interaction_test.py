@@ -152,6 +152,12 @@ def interaction_test():
 
         valid_scenarios_in_file = 0
 
+        try:
+            scenarios = list(scenarios)
+        except tf.errors.DataLossError:
+            logging.error(f"File {file} is not a valid TFRecord. Skipping.")
+            continue
+
         for scenario in scenarios:
             parsed_data = scenario_pb2.Scenario()
             
