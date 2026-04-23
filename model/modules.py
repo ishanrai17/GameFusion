@@ -133,8 +133,6 @@ class CameraTokenEncoder(nn.Module):
 
         # embed tokens and add positional embeddings
         x = self.token_embedding(tokens)
-        print(x.shape)
-        print(x)
         x = self.codebook_proj(x)
         t_emb = self.temporal_embedding(torch.arange(T, device=tokens.device))
         c_emb = self.camera_embedding(torch.arange(C, device=tokens.device))
