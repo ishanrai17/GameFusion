@@ -192,10 +192,10 @@ def _plot_trajectories(trajectories):
     for i, traj in enumerate(trajectories):
         if i == 0:
             # Ego Prediction -> Red to match the legend
-            plt.scatter(traj[:, 0], traj[:, 1], c='#ef4444', s=30, zorder=11)
+            plt.scatter(traj[:, 0], traj[:, 1], c='#ef4444', s=15, zorder=5)
         else:
             # Target Prediction -> Yellow to match the legend
-            plt.scatter(traj[:, 0], traj[:, 1], c='#eab308', s=30, zorder=11)
+            plt.scatter(traj[:, 0], traj[:, 1], c='#eab308', s=15, zorder=5)
 
 
 def _plot_map_features(map_features):
