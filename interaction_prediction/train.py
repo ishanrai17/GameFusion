@@ -175,10 +175,10 @@ def main():
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     # define optimizer and loss function
-    camera_params = [p for n, p in model.named_parameters()
-                 if 'camera_encoder' in n]
-    other_params  = [p for n, p in model.named_parameters()
-                    if 'camera_encoder' not in n]
+    camera_names = {'camera_encoder', 'camera_cross_attn', 'camera_cross_norm',
+                'camera_cross_ffn', 'camera_cross_ffn_norm', 'aux_head'}
+    camera_params = [p for n, p in model.named_parameters() if any(c in n for c in camera_names)]
+    other_params = [p for n, p in model.named_parameters() if not any(c in n for c in camera_names)]
 
     optimizer = optim.AdamW([
         {'params': other_params, 'lr': args.learning_rate},
