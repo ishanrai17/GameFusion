@@ -268,33 +268,48 @@ class LiDAREncoder2(nn.Module):
         x = x.flatten(2).transpose(1, 2)
         x = self.fnn_block(x)
         return x
+
     
 class LiDAREncoder3(nn.Module):
     def __init__(self):
-        super(LiDAREncoder3, self).__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv2d(12, 32, 3, stride=2, padding=1), nn.ReLU(),
-            nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.ReLU(),
-            nn.AdaptiveAvgPool2d(1)
-        )
-        self.proj = nn.Linear(64, 256)
-
-    def forward(self, inputs):
-        feat = self.cnn(inputs).flatten(1)
-        return self.proj(feat)
-    
-class LiDAREncoder4(nn.Module):
-    """Will try out an LSTM later"""
-    def __init__(self):
-        super(LiDAREncoder4, self).__init__()
-        pass
+        super().__init__()
+        self.cnn = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
+        for param in self.cnn.parameters():
+            param.requires_grad = False
+        for param in self.cnn.layer4.parameters():
+            param.requires_grad = True
+        self.cnn.conv1 = nn.Conv2d(12, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.cnn.fc = nn.Identity()
+        self.lstm = nn.LSTM(512, 256, batch_first=True)
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        # x comes as (B, 12, 11, 300, 300) from dataloader (C, T, H, W)
-        x = x.permute(0, 2, 1, 3, 4)     # → (B, 11, 12, 300, 300) = (B, T, C, H, W)
+        # → (B, 11, 12, 300, 300) = (B, T, C, H, W)
+        x = x.permute(0, 2, 1, 3, 4)     
         B, T, C, H, W = x.shape
-        x = x.reshape(B * T, C, H, W)     # (B*11, 12, 300, 300)
-        feats = self.cnn(x)               # (B*11, 512)
-        feats = feats.view(B, T, -1)      # (B, 11, 512)
-        out, _ = self.lstm(feats)          # (B, 11, 256)
+        # (B*11, 12, 300, 300)
+        x = x.reshape(B * T, C, H, W)   
+        # (B*11, 512) 
+        feats = self.cnn(x)    
+         # (B, 11, 512)           
+        feats = feats.view(B, T, -1) 
+        # (B, 11, 256)
+        feats = self.dropout(feats)    
+        out, _ = self.lstm(feats)          
         return out
+
+
+    
+# class LiDAREncoder3(nn.Module):
+#     def __init__(self):
+#         super(LiDAREncoder3, self).__init__()
+#         self.cnn = nn.Sequential(
+#             nn.Conv2d(12, 32, 3, stride=2, padding=1), nn.ReLU(),
+#             nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.ReLU(),
+#             nn.AdaptiveAvgPool2d(1)
+#         )
+#         self.proj = nn.Linear(64, 256)
+
+#     def forward(self, inputs):
+#         feat = self.cnn(inputs).flatten(1)
+#         return self.proj(feat)
