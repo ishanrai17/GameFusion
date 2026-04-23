@@ -332,10 +332,8 @@ class DataProcessv1(DataProcess):
         
         return all_frames
 
-        
-        
-    def process_data(self, viz=True,test=False):
-        
+    def process_data(self, viz=True, test=False):
+
         if self.point_dir != '':
             self.build_points()
 
@@ -347,7 +345,7 @@ class DataProcessv1(DataProcess):
             for data in dataset:
                 parsed_data = scenario_pb2.Scenario()
                 parsed_data.ParseFromString(data.numpy())
-                
+
                 scenario_id = parsed_data.scenario_id
                 self.scenario_id = scenario_id
                 objects_of_interest = parsed_data.objects_of_interest
@@ -365,18 +363,17 @@ class DataProcessv1(DataProcess):
                 self.build_map(parsed_data.map_features, parsed_data.dynamic_map_states)
 
                 if test:
-                    if parsed_data.tracks[tracks_to_predict[0].track_index].object_type==1:
-                        self.sdc_ids_list = [([tracks_list[1], tracks_list[0]],1)]
+                    if parsed_data.tracks[tracks_to_predict[0].track_index].object_type == 1:
+                        self.sdc_ids_list = [([tracks_list[1], tracks_list[0]], 1)]
                     else:
-                        self.sdc_ids_list = [(tracks_list,1)] 
+                        self.sdc_ids_list = [(tracks_list, 1)]
                 else:
                     self.interactive_process(tracks_list, interact_list, parsed_data.tracks)
-                    
+
                 lidar_frames = self.get_lidar_point(parsed_data)
 
                 for pairs in self.sdc_ids_list:
-                    sdc_ids, interesting = pairs[0], pairs[1]                   
-                    # process data
+                    sdc_ids, interesting = pairs[0], pairs[1]
                     ego = self.ego_process(sdc_ids, parsed_data.tracks)
 
                     ego_type = parsed_data.tracks[sdc_ids[0]].object_type
@@ -397,10 +394,10 @@ class DataProcessv1(DataProcess):
                         ground_truth = np.zeros((2, self.future_len, 5))
                     else:
                         ground_truth = self.ground_truth_process(sdc_ids, parsed_data.tracks)
-                    ego, neighbors, map_lanes, map_crosswalks, ground_truth,region_dict = self.normalize_data(ego, neighbors, map_lanes, map_crosswalks, ground_truth, viz=viz)
-                    
+                    ego, neighbors, map_lanes, map_crosswalks, ground_truth, region_dict = self.normalize_data(ego, neighbors,map_lanes,map_crosswalks,ground_truth, viz=viz)
+
                     center, angle = np.array(self.current_xyzh[0][:2]), self.current_xyzh[0][3]
-                    
+
                     if len(lidar_frames) > 0 and not self.ignore_lidar_bev:
                         bev_frames = []
                         for lidar_pts in lidar_frames:
@@ -410,33 +407,51 @@ class DataProcessv1(DataProcess):
                         lidar_bev = np.array(bev_frames, dtype=np.uint8)
                     else:
                         lidar_bev = np.zeros((11, 12, 300, 300), dtype=np.uint8)
-                    
+
+                    camera_array = np.zeros((11, 8, 256), dtype=np.float32)
+                    if len(parsed_data.frame_camera_tokens) > 0:
+                        for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
+                            if frame_idx >= 11:
+                                break
+                            for cam_idx, cam in enumerate(frame.camera_tokens):
+                                if cam_idx >= 8:
+                                    break
+                                tokens = list(cam.tokens)
+                                camera_array[frame_idx, cam_idx, :len(tokens)] = tokens
+
                     if self.point_dir == '':
-                        region_dict = {6:np.zeros((6,2))}
+                        region_dict = {6: np.zeros((6, 2))}
                     # save data
-                    inter = 'interest' if interesting==1 else 'r'
+                    inter = 'interest' if interesting == 1 else 'r'
                     if not self.ignore_vectorized_data:
-                        os.makedirs(self.save_dir , exist_ok=True)
+                        os.makedirs(self.save_dir, exist_ok=True)
                         filename = self.save_dir + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
                         if test:
-                            np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
-                            map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                            object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
-                            lidar_bev=lidar_bev
-                            )
+                            np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors),
+                                                map_lanes=np.array(map_lanes),
+                                                map_crosswalks=np.array(map_crosswalks),
+                                                object_type=np.array(object_type), region_6=np.array(region_dict[6]),
+                                                object_index=np.array(object_index),
+                                                current_state=np.array(self.current_xyzh[0]),
+                                                lidar_bev=lidar_bev,
+                                                camera_tokens=camera_array
+                                                )
                         else:
-                            np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
-                            map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                            object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth), 
-                            lidar_bev=lidar_bev
-                            )
-          
+                            np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors),
+                                                map_lanes=np.array(map_lanes),
+                                                map_crosswalks=np.array(map_crosswalks),
+                                                object_type=np.array(object_type), region_6=np.array(region_dict[6]),
+                                                object_index=np.array(object_index),
+                                                current_state=np.array(self.current_xyzh[0]),
+                                                gt_future_states=np.array(ground_truth),
+                                                lidar_bev=lidar_bev,
+                                                camera_tokens=camera_array
+                                                )
                     # if not self.ignore_lidar_bev:
                     #     os.makedirs(self.save_dir + "/lidar_bev", exist_ok=True)
                     #     lidar_filename = self.save_dir + "/lidar_bev" + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
                     #     np.savez_compressed(lidar_filename, lidar_bev=lidar_bev)
-                        
-                
+
                 self.pbar.update(1)
 
             self.pbar.close()
