@@ -30,22 +30,22 @@ class InteractionPredictionTestProcessor(DataProcess):
         self.n_refline_waypoints = 1000
         self.include_camera = include_camera
 
-    def process_frame(self, timestep, sdc_ids, tracks, scenario):      
+    def process_frame(self, timestep, sdc_ids, tracks, scenario):
         # 1. Fetch raw data for both interacting agents
-        ego = self.ego_process(sdc_ids, tracks) 
+        ego = self.ego_process(sdc_ids, tracks)
         neighbors, neighbors_to_predict = self.neighbors_process(sdc_ids, tracks)
-        
+
         # 2. Map Array Initialization matching GameFormer's expected (100, 16) dimensions
         agent_map_lanes = np.zeros(shape=(1+self.num_neighbors, self.n_lanes, 100, 16), dtype=np.float32)
         agent_map_crosswalk = np.zeros(shape=(1+self.num_neighbors, self.n_crosswalks, 100, 3), dtype=np.float32)
 
         # 3. Intercept and downsample maps for Primary Ego (Agent 1) and Interacting Agent (Agent 2)
         raw_lanes_0, agent_map_crosswalk[0] = self.map_process(ego[0])
-        agent_map_lanes[0] = raw_lanes_0[:, ::3, :16] 
-        
+        agent_map_lanes[0] = raw_lanes_0[:, ::3, :16]
+
         raw_lanes_1, agent_map_crosswalk[1] = self.map_process(ego[1])
         agent_map_lanes[1] = raw_lanes_1[:, ::3, :16]
-        
+
         # Maps for background neighbors
         for i in range(self.num_neighbors - 1):
             if neighbors[i, -1, 0] != 0:
@@ -53,30 +53,30 @@ class InteractionPredictionTestProcessor(DataProcess):
                 agent_map_lanes[i+2] = raw_lanes_n[:, ::3, :16]
 
         ground_truth = self.ground_truth_process(sdc_ids, tracks)
-        
+
         # 4. Normalize all trajectories
         ego, neighbors, agent_map_lanes, agent_map_crosswalk, ground_truth, _ = self.normalize_data(
             ego, neighbors, agent_map_lanes, agent_map_crosswalk, ground_truth, viz=False)
-            
+
         # 5. Repackage shapes to match GameFormer's expectations
         target_id = sdc_ids[1]
         target_idx = -1
-        
+
         # Find where the target is hiding in the background neighbors
         for i, n_id in enumerate(neighbors_to_predict):
             if n_id == target_id:
                 target_idx = i
                 break
-                
+
         # Swap it to index 0 safely (preserving relative coordinates!)
         if target_idx != -1 and target_idx != 0:
             neighbors[[0, target_idx]] = neighbors[[target_idx, 0]]
             neighbors_to_predict[0], neighbors_to_predict[target_idx] = neighbors_to_predict[target_idx], neighbors_to_predict[0]
 
         obs = {
-            'ego_state': ego[0], 
-            'neighbors_state': neighbors, 
-            'map_lanes': agent_map_lanes, 
+            'ego_state': ego[0],
+            'neighbors_state': neighbors,
+            'map_lanes': agent_map_lanes,
             'map_crosswalks': agent_map_crosswalk
         }
 
@@ -84,7 +84,7 @@ class InteractionPredictionTestProcessor(DataProcess):
         if self.include_camera:
             camera_tokens = self.extract_camera_tokens(scenario)
             obs['camera_tokens'] = camera_tokens
-        
+
         return obs, neighbors_to_predict, ground_truth
 
 
@@ -101,10 +101,10 @@ def interaction_test():
     files = glob.glob(args.test_set+'/*')
     test_files = []
     test_id = 0
-    
+
     # Ignore hidden files and folders like .ipynb_checkpoints
     required_files = [f for f in os.listdir(args.test_set) if not f.startswith('.')]
-    
+
     for file in required_files:
         file_path = f"{args.test_set}/{file}"
         test_files.append(file_path)
@@ -139,11 +139,11 @@ def interaction_test():
     gameformer.eval()
 
     for file in test_files:
-        
+
         if not os.path.exists(file) or os.path.getsize(file) == 0:
             logging.warning(f"File {file} is empty or missing. Skipping.")
             continue
-            
+
         try:
             scenarios = tf.data.TFRecordDataset(file)
         except Exception as e:
@@ -160,35 +160,35 @@ def interaction_test():
 
         for scenario in scenarios:
             parsed_data = scenario_pb2.Scenario()
-            
+
             try:
                 parsed_data.ParseFromString(scenario.numpy())
             except Exception as e:
                 logging.error(f"Corrupted scenario encountered in {file}: {e}. Skipping.")
                 continue
-                
+
             scenario_id = parsed_data.scenario_id
-            
+
             if len(parsed_data.tracks) == 0 or len(parsed_data.map_features) == 0:
                 logging.warning(f"Scenario {scenario_id} is missing critical tracks or map features. Skipping.")
                 continue
 
             if args.include_camera and len(parsed_data.frame_camera_tokens) == 0:
                 logging.warning(f"Scenario {scenario_id} is missing camera tokens. Will attempt fallback from camera_dir.")
-            
+
             # Extract the two interacting tracks
             tracks_to_predict = [ids.track_index for ids in parsed_data.tracks_to_predict]
-            
+
             if len(tracks_to_predict) < 2:
                 logging.warning(f"Scenario {scenario_id} does not have 2 interacting agents. Skipping.")
                 continue
-                
+
             if max(tracks_to_predict) >= len(parsed_data.tracks):
                 logging.error(f"Scenario {scenario_id}: tracks_to_predict index out of bounds. Skipping.")
                 continue
-                
+
             sdc_ids = [tracks_to_predict[0], tracks_to_predict[1]]
-            
+
             valid_scenarios_in_file += 1
             test_id += 1
             logging.info(f"Testing scenario: {scenario_id}")
@@ -196,22 +196,22 @@ def interaction_test():
 
             processor.build_map(parsed_data.map_features, parsed_data.dynamic_map_states)
 
-            for curr_t in range(10, len(timesteps)-80, 5):
+            for curr_t in range(10, len(timesteps)-50, 5):
                 logging.info(f"Testing timestep: {curr_t}")
                 scenario_ids.append(f'{scenario_id}_{curr_t}')
-                
+
                 # Pass sdc_ids as a list
                 data = processor.process_frame(curr_t, sdc_ids, parsed_data.tracks, parsed_data)
-                
+
                 if data is None:
                     continue
                 else:
                     obs, neighbor_ids, gt_future = data
 
-               
+
                 # Force the visualizer to use the ID of the injected agent
                 neighbor_ids = [sdc_ids[1]]
-                
+
                 inputs = {
                     'ego_state': torch.from_numpy(obs['ego_state']).unsqueeze(0).to(args.device),
                     'neighbors_state': torch.from_numpy(obs['neighbors_state']).unsqueeze(0).to(args.device),
@@ -234,13 +234,13 @@ def interaction_test():
                 trajectories = select_future(trajectories, scores)
                 plan = trajectories[0].cpu()
                 predictions = trajectories[1:].cpu().numpy()
- 
+
                 current_state = inputs['ego_state'][0, -1].cpu()
                 xy = torch.cat([current_state[None, :2], plan])
                 dxy = torch.diff(xy, dim=0)
                 theta = torch.atan2(dxy[:, 1], dxy[:, 0].clip(min=1e-3)).unsqueeze(-1)
                 plan = torch.cat([plan, theta], dim=-1).numpy()
-                collision = check_collision(plan, neighbors_future, obs['ego_state'][-1, 5:], 
+                collision = check_collision(plan, neighbors_future, obs['ego_state'][-1, 5:],
                                             obs['neighbors_state'][:, -1, 5:])
                 collisions.append(collision)
                 miss = check_ego_miss(plan, ego_future)
@@ -263,26 +263,26 @@ def interaction_test():
                     # 1. Trim the padded zeros from the Predictions
                     ego_valid_len = np.sum(np.any(ego_future[:, :2] != 0, axis=-1))
                     neigh_valid_len = np.sum(np.any(neighbors_future[0][:, :2] != 0, axis=-1))
-                    
+
                     trajectories_np = trajectories.cpu().numpy()
                     trimmed_trajs = [
                         trajectories_np[0][:max(1, ego_valid_len)],
                         trajectories_np[1][:max(1, neigh_valid_len)]
                     ]
-                    
+
                     # 2. Trim the padded zeros from the Ground Truth
                     trimmed_gt = [
-                        ego_future[:max(1, ego_valid_len), :2], 
+                        ego_future[:max(1, ego_valid_len), :2],
                         neighbors_future[0][:max(1, neigh_valid_len), :2]
                     ]
-                    
+
                     # 3. Extract Ego Pose (X, Y, Heading)
                     ego_xyh = [processor.current_xyzh[0][0], processor.current_xyzh[0][1], processor.current_xyzh[0][3]]
-                    
+
                     # 4. Transform BOTH paths to global map coordinates
                     global_pred_trajectories = transform_to_global_frame(curr_t, trimmed_trajs, ego_xyh, neighbor_ids, parsed_data.tracks)
                     global_gt_trajectories = transform_to_global_frame(curr_t, trimmed_gt, ego_xyh, neighbor_ids, parsed_data.tracks)
-                    
+
                     # 5. Package Map Features safely
                     map_features_dict = {
                         'lane': getattr(processor, 'lanes', {}),
@@ -296,7 +296,7 @@ def interaction_test():
 
                     # 6. Actually draw and save the frame! (Passing the new global_gt_trajectories)
                    # Pass sdc_ids[0] so the visualizer knows exactly which car is the Ego!
-                    plot_scenario(curr_t, sdc_ids[0], neighbor_ids, map_features_dict, ego_xyh, 
+                    plot_scenario(curr_t, sdc_ids[0], neighbor_ids, map_features_dict, ego_xyh,
                                   parsed_data.tracks, global_pred_trajectories, global_gt_trajectories, args.name, scenario_id, args.save)
 
             # GIF Compilation Block
@@ -305,21 +305,21 @@ def interaction_test():
                 frames = []
                 png_files = sorted([f for f in os.listdir(save_path) if f.startswith(f"{scenario_id}_") and f.endswith('.png')],
                                    key=lambda x: int(x.split('_')[1].split('.')[0]))
-                
+
                 for filename in png_files:
                     frames.append(Image.open(os.path.join(save_path, filename)))
-                
+
                 if frames:
                     gif_path = f"{save_path}/{scenario_id}_animation.gif"
                     frames[0].save(gif_path, format='GIF', append_images=frames[1:], save_all=True, duration=200, loop=0)
                     logging.info(f"Successfully saved scenario GIF: {gif_path}")
 
-            
-            
+
+
         if valid_scenarios_in_file == 0:
             logging.warning(f"File {file} processed, but yielded 0 valid interacting scenarios.")
 
-    df = pd.DataFrame(data={'scenarios': scenario_ids, 'collision': collisions, 'miss': miss_rates, 
+    df = pd.DataFrame(data={'scenarios': scenario_ids, 'collision': collisions, 'miss': miss_rates,
                             'Prediction_ADE': prediction_ADE, 'Prediction_FDE': prediction_FDE,
                             'Human_L2_1s': similarity_1s, 'Human_L2_3s': similarity_3s, 'Human_L2_5s': similarity_5s})
     df.to_csv(f'./testing_log/{args.name}/testing_log.csv')
