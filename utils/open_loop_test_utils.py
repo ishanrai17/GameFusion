@@ -35,6 +35,8 @@ def transform_to_global_frame(timestep, trajectories, ego_pose, predict_ids, tra
     ego_h = ego_pose[2]
 
     global_trajectories = []   
+    
+    # --- 1. Transform Ego Trajectory ---
     line = LineString(trajectories[0])
     line = rotate(line, ego_h, origin=(0, 0), use_radians=True)
     line = affine_transform(line, [1, 0, 0, 1, ego_p[0], ego_p[1]])
@@ -43,11 +45,19 @@ def transform_to_global_frame(timestep, trajectories, ego_pose, predict_ids, tra
     traj = trajectory_smoothing(traj)
     global_trajectories.append(traj)
 
+    # --- 2. Transform Target Trajectories ---
     for i, j in enumerate(predict_ids):
+        # Target's true starting global position
         current_state = np.array([tracks[j].states[timestep].center_x, tracks[j].states[timestep].center_y])
+        
         line = LineString(trajectories[i+1])
+        
+        # Model outputs are aligned to Ego's heading, so we rotate by ego_h
         line = rotate(line, ego_h, origin=(0, 0), use_radians=True)
-        line = affine_transform(line, [1, 0, 0, 1, ego_p[0], ego_p[1]])
+        
+        # FIX: Translate by the Target's starting position (current_state), NOT the Ego's position!
+        line = affine_transform(line, [1, 0, 0, 1, current_state[0], current_state[1]])
+        
         line = np.array(line.coords)
         traj = np.insert(line, 0, current_state, axis=0)
         traj = trajectory_smoothing(traj)
