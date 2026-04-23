@@ -30,6 +30,36 @@ class InteractionPredictionTestProcessor(DataProcess):
         self.n_refline_waypoints = 1000
         self.include_camera = include_camera
 
+    def extract_camera_tokens_v2(self, parsed_data):
+        print(f"Extracting camera tokens for scenario {parsed_data.scenario_id}...")
+
+        camera_array = np.zeros((11, 8, 256), dtype=np.int32)
+
+        if len(parsed_data.frame_camera_tokens) == 0:
+            scenario_id = parsed_data.scenario_id
+            camera_file = f'gs://waymo_open_dataset_motion_v_1_2_1/uncompressed/lidar_and_camera/validation/{scenario_id}.tfrecord'
+            try:
+                camera_dataset = tf.data.TFRecordDataset(camera_file)
+                for cam_data in camera_dataset:
+                    camera_scenario = scenario_pb2.Scenario()
+                    camera_scenario.ParseFromString(cam_data.numpy())
+                    parsed_data.frame_camera_tokens.MergeFrom(camera_scenario.frame_camera_tokens)
+                    break
+            except:
+                pass
+
+        if len(parsed_data.frame_camera_tokens) > 0:
+            for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
+                if frame_idx >= 11:
+                    break
+                for cam_idx, cam in enumerate(frame.camera_tokens):
+                    if cam_idx >= 8:
+                        break
+                    tokens = list(cam.tokens)
+                    camera_array[frame_idx, cam_idx, :len(tokens)] = [t + 1 for t in tokens]
+
+        return camera_array
+
     def process_frame(self, timestep, sdc_ids, tracks, scenario):
         # 1. Fetch raw data for both interacting agents
         ego = self.ego_process(sdc_ids, tracks)
@@ -82,7 +112,7 @@ class InteractionPredictionTestProcessor(DataProcess):
 
         # Conditional Camera Token Processing
         if self.include_camera:
-            camera_tokens = self.extract_camera_tokens(scenario)
+            camera_tokens = self.extract_camera_tokens_v2(scenario)
             obs['camera_tokens'] = camera_tokens
 
         return obs, neighbors_to_predict, ground_truth
@@ -221,6 +251,9 @@ def interaction_test():
 
                 if args.include_camera:
                     inputs['camera_tokens'] = torch.from_numpy(obs['camera_tokens']).unsqueeze(0).long().to(args.device)
+
+
+                print(f"Input ego state shape: {inputs.keys()}")
 
                 ego_future = gt_future[0]
                 neighbors_future = gt_future[1:]
