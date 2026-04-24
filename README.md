@@ -1,4 +1,4 @@
-# Project 4 — Camera Calibration, Pose Estimation, and AR Overlay
+# Interaction Prediction with GameFusion: Multi-Camera Visual Token Fusion
 
 **Authors:** Ishan Rai, Ying-Jen Chiang, Rohith Kumar Senthil Kumar
 **Emails:** rai.ish@northeastern.edu, chiang.yin@northeastern.edu, senthilkumar.ro@northeastern.edu
