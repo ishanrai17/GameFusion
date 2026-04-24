@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+    Interaction Prediction Utilities: This module provides utility functions for training and evaluating the GameFormer model, including loss functions for imitation learning and Gaussian Mixture Models (GMM), as well as a wrapper class for computing motion metrics based on the Waymo Open Dataset evaluation code. The utilities facilitate the calculation of losses during training and the evaluation of predicted trajectories against ground truth data, enabling the assessment of the model's performance in predicting interactions in autonomous driving scenarios.
+"""
+
 import os
 import torch
 import logging
@@ -53,6 +62,7 @@ class DrivingData(Dataset):
 
 
 def imitation_loss(trajectories, ground_truth,gmm=True):
+    """Calculate the imitation loss for the predicted trajectories compared to the ground truth trajectories, using a combination of Average Displacement Error (ADE) and Final Displacement Error (FDE) as the loss metric. The function identifies the best predicted mode based on the distance to the ground truth and computes the loss accordingly, with an option to use a Gaussian Mixture Model (GMM) loss instead for more complex trajectory distributions."""
     metric_time = [29, 49, 79]
     ade_distance = torch.norm(trajectories[:, :, :, 4::5,:2] - ground_truth[:, :, None, 4::5, :2], dim=-1)
     fde_distance = torch.norm(trajectories[:, :, :, metric_time,:2] - ground_truth[:, :, None, metric_time, :2], dim=-1)
@@ -69,6 +79,7 @@ def imitation_loss(trajectories, ground_truth,gmm=True):
     return loss, best_mode, best_mode_future
 
 def gmm_loss(trajectories, convs, probs, ground_truth):
+    """Calculate the Gaussian Mixture Model (GMM) loss for the predicted trajectories compared to the ground truth trajectories."""
     metric = [29, 49, 79]
     distance = torch.norm(trajectories[:, :, :, : ,:2] - ground_truth[:, :, None, :, :2], dim=-1)
     ndistance = distance.mean(-1) + distance[...,metric].sum(-1) 
@@ -100,6 +111,7 @@ def gmm_loss(trajectories, convs, probs, ground_truth):
     return loss, best_mode, best_mode_future, convs
 
 def level_k_loss(outputs, ego_future, neighbor_future, levels, gmm=True):
+    """"Calculate the loss for each level of interaction prediction."""
     loss: torch.tensor = 0
     neighbor_future_valid = torch.ne(neighbor_future[..., :2].sum(-1), 0)
     ego_future_valid = torch.ne(ego_future[..., :2].sum(-1), 0)
@@ -127,6 +139,7 @@ def level_k_loss(outputs, ego_future, neighbor_future, levels, gmm=True):
 
 
 def motion_metrics(trajectories, ego_future, neighbor_future):
+    """Calculate motion metrics for the predicted trajectories compared to the ground truth trajectories."""
     ego_future_valid = torch.ne(ego_future[..., :2], 0)
     ego_trajectory = trajectories[:, 0] * ego_future_valid
     distance = torch.norm(ego_trajectory[:, 4::5, :2] - ego_future[:, 4::5, :2], dim=-1)

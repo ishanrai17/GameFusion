@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+    Data Utilities: This module provides utility functions for processing and normalizing the input data for the GameFormer model, including functions for segmenting map encodings, normalizing agent trajectories and map features, and finding reference lanes and routes based on the agent's current position and the map data. The utilities facilitate the preparation of the input data for the model, ensuring that it is in the appropriate format and normalized for effective training and inference in predicting interactions in autonomous driving scenarios.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString, Point, Polygon
@@ -6,10 +15,12 @@ from utils.cubic_spline_planner import Spline2D
 
 
 def wrap_to_pi(theta):
+    """Wrap the input angle to the range [-pi, pi]."""
     return (theta+np.pi) % (2*np.pi) - np.pi
 
 
 def compute_direction_diff(ego_theta, target_theta):
+    """Compute the absolute difference in direction between the ego vehicle's heading and the target lane's heading, accounting for the circular nature of angles by wrapping the difference to the range [0, pi]."""
     delta = np.abs(ego_theta - target_theta)
     delta = np.where(delta > np.pi, 2*np.pi - delta, delta)
 
@@ -119,6 +130,7 @@ def polygon_completion(polygon):
 
 
 def get_polylines(lines):
+    """Get polylines from the input lines."""
     polylines = {}
 
     for line in lines.keys():
@@ -134,6 +146,7 @@ def get_polylines(lines):
 
 
 def find_reference_lanes(agent_type, agent_traj, lanes):
+    """Find the reference lanes for the given agent trajectory."""
     curr_lane_ids = {}
         
     if agent_type == 2:
@@ -170,6 +183,7 @@ def find_reference_lanes(agent_type, agent_traj, lanes):
 
 
 def find_neighbor_lanes(curr_lane_ids, traj, lanes, lane_polylines):
+    """Find the neighbor lanes for the given reference lanes."""
     neighbor_lane_ids = {}
 
     for curr_lane, start in curr_lane_ids.items():
@@ -201,6 +215,7 @@ def find_neighbor_lanes(curr_lane_ids, traj, lanes, lane_polylines):
 
 
 def find_neareast_point(curr_point, line):
+    """Find the nearest point on a line to a given point."""
     distance_to_curr_point = np.linalg.norm(curr_point[np.newaxis, :2] - line[:, :2], axis=-1)
     neareast_point = line[np.argmin(distance_to_curr_point)]
     
@@ -208,6 +223,7 @@ def find_neareast_point(curr_point, line):
 
 
 def generate_target_course(x, y):
+    """Generate a smooth target course using cubic spline interpolation for the given x and y coordinates."""
     csp = Spline2D(x, y)
     s = np.arange(0, csp.s[-1], 0.1)
 
@@ -223,6 +239,7 @@ def generate_target_course(x, y):
 
 
 def find_map_waypoint(pos, polylines):
+    """Find the map waypoint closest to the given position."""
     waypoint = [-1, -1, 1e9, 1e9]
     direction_threshold = 10
 
@@ -243,6 +260,7 @@ def find_map_waypoint(pos, polylines):
 
 
 def find_route(traj, timestep, cur_pos, map_lanes, map_signals):
+    """Find the reference route for the given trajectory and current position."""
     lane_polylines = get_polylines(map_lanes)
     end_lane, end_point = find_map_waypoint(np.array((traj[-1].center_x, traj[-1].center_y, traj[-1].heading)), lane_polylines)
     cur_lane, _ = find_map_waypoint(cur_pos, lane_polylines)
@@ -288,6 +306,7 @@ def find_route(traj, timestep, cur_pos, map_lanes, map_signals):
 
 
 def imputer(traj):
+    """Impute missing values in the trajectory."""
     x, y, v_x, v_y, theta = traj[:, 0], traj[:, 1], traj[:, 3], traj[:, 4], traj[:, 2]
 
     if np.any(x==0):
@@ -304,6 +323,7 @@ def imputer(traj):
 
 
 def agent_norm(traj, center, angle, impute=False):
+    """Normalize the agent trajectory with respect to the given center and angle."""
     if impute:
         traj = imputer(traj[:, :5])
 
@@ -327,6 +347,7 @@ def agent_norm(traj, center, angle, impute=False):
 
 
 def map_norm(map_line, center, angle):
+    """Normalize the map line with respect to the given center and angle."""
     self_line = LineString(map_line[:, 0:2])
     self_line = affine_transform(self_line, [1, 0, 0, 1, -center[0], -center[1]])
     self_line = rotate(self_line, -angle, origin=(0, 0), use_radians=True)
@@ -357,6 +378,7 @@ def map_norm(map_line, center, angle):
 
 
 def ref_line_norm(ref_line, center, angle):
+    """Normalize the reference line with respect to the given center and angle."""
     xy = LineString(ref_line[:, 0:2])
     xy = affine_transform(xy, [1, 0, 0, 1, -center[0], -center[1]])
     xy = rotate(xy, -angle, origin=(0, 0), use_radians=True)

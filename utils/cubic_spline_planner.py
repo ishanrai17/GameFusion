@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+    Cubic Spline Planner: A utility for generating smooth trajectories using cubic spline interpolation, which is essential for path planning in autonomous driving scenarios. The Spline and Spline2D classes implement the cubic spline interpolation in one and two dimensions, respectively, while the calc_spline_course function generates a smooth course based on given x and y coordinates. This utility is crucial for creating realistic and feasible paths for autonomous vehicles to follow.
+"""
+
 import math
 import numpy as np
 import bisect

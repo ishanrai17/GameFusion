@@ -4,7 +4,7 @@
   5330 Computer Vision
   Ying-Jen Chiang
   Final Project 5
-    GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
+    Modules for GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
 """
 
 import math

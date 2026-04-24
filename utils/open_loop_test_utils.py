@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+    Open Loop Testing Utilities for GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
+"""
+
 import os
 import logging
 import torch
@@ -13,6 +22,7 @@ from shapely.affinity import affine_transform, rotate
 
 
 def initLogging(log_file: str, level: str = "INFO"):
+    """Initialize logging configuration to log messages to both a file and the console with a consistent format."""
     logging.basicConfig(filename=log_file, filemode='w',
                         level=getattr(logging, level, None),
                         format='[%(levelname)s %(asctime)s] %(message)s',
@@ -21,6 +31,7 @@ def initLogging(log_file: str, level: str = "INFO"):
 
 
 def select_future(trajectories, scores):
+    """Select the future trajectory for each agent based on the highest predicted score."""
     trajectories = trajectories.squeeze(0)
     scores = scores.squeeze(0)
     best_mode = torch.argmax(scores, dim=-1)
@@ -31,6 +42,7 @@ def select_future(trajectories, scores):
 
 
 def transform_to_global_frame(timestep, trajectories, ego_pose, predict_ids, tracks):
+    """Transform trajectories to the global frame."""
     ego_p = ego_pose[:2]
     ego_h = ego_pose[2]
 
@@ -57,6 +69,7 @@ def transform_to_global_frame(timestep, trajectories, ego_pose, predict_ids, tra
 
 
 def transform_to_global_frame_multi_modal(trajectories, ego_pose):
+    """Transform trajectories to the global frame for multiple agents and multiple modes."""
     ego_p = ego_pose[0][:2]
     ego_h = ego_pose[1]
 
@@ -77,6 +90,7 @@ def transform_to_global_frame_multi_modal(trajectories, ego_pose):
 
 
 def trajectory_smoothing(trajectory):
+    """Apply smoothing to the trajectory."""
     x = trajectory[:,0]
     y = trajectory[:,1]
 
@@ -93,12 +107,14 @@ def trajectory_smoothing(trajectory):
     return np.column_stack([x, y])
 
 def _plot_ground_truth(gt_trajectories):
+    """Plot the ground truth trajectories for the agents in the scenario."""
     for i, traj in enumerate(gt_trajectories):
         # Draw bold, bright green lines for ground truth so it pops against the white lanes
         plt.plot(traj[:, 0], traj[:, 1], color='#22c55e', lw=3.5, alpha=1.0, solid_capstyle='round', zorder=4)
 
 # Add 'gt_trajectories' right after 'trajectories'
 def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents, trajectories, gt_trajectories, name, scenario_id, save=False):
+    """Visualize the scenario with map features, ground truth trajectories, predicted trajectories, and agent positions. The visualization includes a custom legend and timestep display for better interpretability."""
     plt.ion()
     fig = plt.gcf()
     dpi = 100
@@ -154,6 +170,7 @@ def plot_scenario(timestep, sdc_id, predict_ids, map_features, ego_pose, agents,
 
 
 def _plot_agents(tracks, timestep, sdc_id, predict_ids):
+    """Plot the agents in the scenario, differentiating between the ego vehicle, target vehicles, and background neighbors using distinct colors and z-ordering to ensure clarity in the visualization."""
     for id, track in enumerate(tracks):
         if not track.states[timestep].valid:
             continue
@@ -189,6 +206,7 @@ def _plot_agents(tracks, timestep, sdc_id, predict_ids):
 
 
 def _plot_trajectories(trajectories):
+    """Plot the predicted trajectories for the agents, using distinct colors to differentiate between the ego vehicle's prediction and the target vehicles' predictions, ensuring that the visualization is clear and matches the legend for better interpretability."""
     for i, traj in enumerate(trajectories):
         if i == 0:
             # Ego Prediction -> Red to match the legend
@@ -199,6 +217,7 @@ def _plot_trajectories(trajectories):
 
 
 def _plot_map_features(map_features):
+    """Plot the map features such as lanes, road lines, road edges, crosswalks, speed bumps, and stop signs with distinct styles and colors to enhance the visualization of the scenario's environment."""
     for lane in map_features.get("lane", {}).values():
         pts = np.array([[p.x, p.y] for p in lane.polyline])
         plt.plot(pts[:, 0], pts[:, 1], linestyle=":", color="gray", linewidth=2)
@@ -245,6 +264,7 @@ def _plot_map_features(map_features):
 
 
 def _plot_traffic_signals(dynamic_map_features):
+    """Plot the traffic signals (traffic lights) on the map, using colored circles to represent the state of each traffic light (red, yellow, green) based on the dynamic map features provided for the current timestep."""
     if not hasattr(dynamic_map_features, 'lane_states'):
         return
         
@@ -266,10 +286,12 @@ def _plot_traffic_signals(dynamic_map_features):
 
 
 def wrap_to_pi(theta):
+    """Wrap an angle to the range [-pi, pi)."""
     return (theta+np.pi) % (2*np.pi) - np.pi
 
 
 def return_circle_list(x, y, l, w, yaw):
+    """Return a list of circle centers representing the vehicle's shape for collision checking, based on the vehicle's position, dimensions, and orientation."""
     r = w/np.sqrt(2)
     cos_yaw = np.cos(yaw)
     sin_yaw = np.sin(yaw)
@@ -300,10 +322,12 @@ def return_circle_list(x, y, l, w, yaw):
 
 
 def return_collision_threshold(w1, w2):
+    """Return the collision threshold based on the widths of two vehicles."""
     return (w1 + w2) / np.sqrt(3.8)
 
 
 def check_collision(ego_center_points, neighbor_center_points, ego_size, neighbors_size):
+    """Check for collisions between the ego vehicle and neighboring vehicles over the predicted trajectory, using the circle-based representation of the vehicles and a distance threshold to determine if a collision occurs at any timestep."""
     collision = False
 
     for t in range(ego_center_points.shape[0]):
@@ -314,6 +338,7 @@ def check_collision(ego_center_points, neighbor_center_points, ego_size, neighbo
 
 
 def check_collision_step(ego_center_points, neighbor_center_points, ego_size, neighbors_size):
+    """Check for collision at a single timestep between the ego vehicle and neighboring vehicles, using the circle-based representation of the vehicles and a distance threshold to determine if a collision occurs."""
     collision = []
     plan_x, plan_y, plan_yaw = ego_center_points[0], ego_center_points[1], ego_center_points[2], 
     plan_l, plan_w = ego_size[0], ego_size[1]
@@ -336,6 +361,7 @@ def check_collision_step(ego_center_points, neighbor_center_points, ego_size, ne
 
 
 def check_ego_miss(traj, route):
+    """Check if the ego vehicle deviates from the route."""
     distance_to_ref = T.distance.cdist(traj[:, :2], route[:, :2])
     distance_to_route = np.min(distance_to_ref, axis=-1)
 
@@ -348,12 +374,14 @@ def check_ego_miss(traj, route):
 
 
 def check_ego_similarity(traj, gt):
+    """Check the similarity between the ego vehicle's trajectory and the ground truth."""
     error = np.linalg.norm(traj[:, :2] - gt[:, :2], axis=-1)
     
     return error
 
 
 def check_agent_prediction(trajs, gt):
+    """Check the accuracy of the predicted trajectories for the agents by calculating the Average Displacement Error (ADE) and Final Displacement Error (FDE) compared to the ground truth trajectories, while handling cases where some agents may not be present in the ground truth."""
     ADE = []
     FDE = []
     mask = np.not_equal(gt[:, :, :2], 0)
@@ -374,6 +402,7 @@ def check_agent_prediction(trajs, gt):
 
 
 def inverse_dynamics(traj, curr_state):
+    """Calculate the control inputs (acceleration and steering) required to follow a given trajectory from the current state, using a simple bicycle model for the vehicle dynamics and ensuring that the control inputs are within realistic limits for acceleration and steering."""
     dt = 0.1
     max_delta = 0.5 # vehicle's steering limits [rad]
     max_a = 5 # vehicle's accleration limits [m/s^2]
@@ -392,6 +421,7 @@ def inverse_dynamics(traj, curr_state):
 
 
 def bicycle_model(control, current_state):
+    """Simulate the bicycle model for vehicle dynamics."""
     dt = 0.1 # discrete time period [s]
     max_delta = 0.6 # vehicle's steering limits [rad]
     max_a = 5 # vehicle's accleration limits [m/s^2]
