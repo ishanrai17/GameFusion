@@ -31,6 +31,7 @@ def training_epoch(train_data, model, optimizer, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
+            'camera_tokens': batch[7].to(args.local_rank)
         }
 
         ego_future = batch[4].to(args.local_rank)
@@ -88,6 +89,7 @@ def validation_epoch(valid_data, model, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
+            'camera_tokens': batch[7].to(args.local_rank)
         }
 
         ego_future = batch[4].to(args.local_rank)
@@ -173,7 +175,17 @@ def main():
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     # define optimizer and loss function
-    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
+    camera_names = {'camera_encoder', 'camera_cross_attn', 'camera_cross_norm',
+                'camera_cross_ffn', 'camera_cross_ffn_norm', 'aux_head'}
+    camera_params = [p for n, p in model.named_parameters() if any(c in n for c in camera_names)]
+    other_params = [p for n, p in model.named_parameters() if not any(c in n for c in camera_names)]
+
+    optimizer = optim.AdamW([
+        {'params': other_params, 'lr': args.learning_rate},
+        {'params': camera_params, 'lr': args.learning_rate * 5}
+    ])
+
+
     scheduler = optim.lr_scheduler.MultiStepLR(
                                             optimizer, 
                                             milestones=[20, 22, 24, 26, 28], 
@@ -260,7 +272,7 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Interaction Prediction Training')
-    parser.add_argument("--local_rank", type=int)
+    parser.add_argument("--local-rank", type=int)
     # training
     parser.add_argument("--batch_size", type=int, help='training batch sizes', default=16)
     parser.add_argument("--training_epochs", type=int, help='training epochs', default=30)

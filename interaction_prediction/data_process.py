@@ -19,10 +19,11 @@ tf.config.set_visible_devices([], 'GPU')
 
 class DataProcess(object):
     def __init__(
-                self, 
+                self,
                 root_dir=[''],
                 point_dir='',
                 save_dir='',
+                camera_dir='',
                 num_neighbors=32
                 ):
         # parameters
@@ -32,8 +33,9 @@ class DataProcess(object):
         self.data_files = root_dir
         self.point_dir = point_dir
         self.save_dir = save_dir
-    
-    
+        self.camera_dir = camera_dir
+
+
     def build_points(self):
         self.points_dict = {}
         for obj_type in ['vehicle','pedestrian','cyclist']:
@@ -62,7 +64,7 @@ class DataProcess(object):
                 self.roads[map_id] = map
             elif map_type == 'stop_sign':
                 self.stop_signs[map_id] = map
-            elif map_type == 'crosswalk': 
+            elif map_type == 'crosswalk':
                 self.crosswalks[map_id] = map
             elif map_type == 'speed_bump':
                 self.speed_bumps[map_id] = map
@@ -99,7 +101,7 @@ class DataProcess(object):
         for curr_lane, start in ref_lane_ids.items():
             candidate = depth_first_search(curr_lane, self.lanes, dist=lane_polylines[curr_lane][start:].shape[0], threshold=300)
             ref_lanes.extend(candidate)
-        
+
         if agent_type != 2:
             # find current lanes' left and right lanes
             neighbor_lane_ids = find_neighbor_lanes(ref_lane_ids, traj, self.lanes, lane_polylines)
@@ -108,13 +110,13 @@ class DataProcess(object):
             for neighbor_lane, start in neighbor_lane_ids.items():
                 candidate = depth_first_search(neighbor_lane, self.lanes, dist=lane_polylines[neighbor_lane][start:].shape[0], threshold=300)
                 ref_lanes.extend(candidate)
-            
+
             # update reference lane ids
             ref_lane_ids.update(neighbor_lane_ids)
 
         # remove overlapping lanes
         ref_lanes = remove_overlapping_lane_seq(ref_lanes)
-        
+
         # get traffic light controlled lanes and stop sign controlled lanes
         traffic_light_lanes = {}
         stop_sign_lanes = []
@@ -126,14 +128,14 @@ class DataProcess(object):
 
         for i, sign in self.stop_signs.items():
             stop_sign_lanes.extend(sign.lane)
-        
+
         # add lanes to the array
         added_lanes = 0
         for i, s_lane in enumerate(ref_lanes):
             added_points = 0
             if i > 5:
                 break
-            
+
             # create a data cache
             cache_lane = np.zeros(shape=(500, 17))
 
@@ -142,7 +144,7 @@ class DataProcess(object):
                 self_line = lane_polylines[lane][curr_index:]
 
                 if added_points >= 500:
-                    break      
+                    break
 
                 # add info to the array
                 for point in self_line:
@@ -158,7 +160,7 @@ class DataProcess(object):
                         left_boundary_type = left_boundary.boundary_type # road line type
                         if left_boundary_type == 0:
                             left_boundary_type = self.roads[left_boundary_id].type + 8 # road edge type
-                        
+
                         if left_start <= curr_index <= left_end:
                             left_boundary_line = road_polylines[left_boundary_id]
                             nearest_point = find_neareast_point(point, left_boundary_line)
@@ -191,7 +193,7 @@ class DataProcess(object):
                         cache_lane[added_points, 13] = traffic_light_lanes[lane][0]
                         if np.linalg.norm(traffic_light_lanes[lane][1:] - point[:2]) < 3:
                             cache_lane[added_points, 14] = True
-             
+
                     # add stop sign
                     if lane in stop_sign_lanes:
                         cache_lane[added_points, 16] = True
@@ -201,11 +203,11 @@ class DataProcess(object):
                     curr_index += 1
 
                     if added_points >= 500:
-                        break             
+                        break
 
             # scale the lane
-            vectorized_map[i] = cache_lane[np.linspace(0, added_points, num=300, endpoint=False, dtype=np.int)]
-          
+            vectorized_map[i] = cache_lane[np.linspace(0, added_points, num=300, endpoint=False, dtype=np.int64)]
+
             # count
             added_lanes += 1
 
@@ -218,12 +220,12 @@ class DataProcess(object):
         for _, crosswalk in self.crosswalks.items():
             polygon = Polygon([(point.x, point.y) for point in crosswalk.polygon])
             polyline = polygon_completion(crosswalk.polygon)
-            polyline = polyline[np.linspace(0, polyline.shape[0], num=100, endpoint=False, dtype=np.int)]
+            polyline = polyline[np.linspace(0, polyline.shape[0], num=100, endpoint=False, dtype=np.int64)]
 
             if detection.intersects(polygon):
                 vectorized_crosswalks[added_cross_walks, :polyline.shape[0]] = polyline
                 added_cross_walks += 1
-            
+
             if added_cross_walks >= 4:
                 break
 
@@ -238,14 +240,14 @@ class DataProcess(object):
             self.ego_type = ego_type
 
             # get the sdc current state
-            self.current_xyzh.append( (tracks[sdc_id].states[self.hist_len-1].center_x, tracks[sdc_id].states[self.hist_len-1].center_y, 
+            self.current_xyzh.append( (tracks[sdc_id].states[self.hist_len-1].center_x, tracks[sdc_id].states[self.hist_len-1].center_y,
                                 tracks[sdc_id].states[self.hist_len-1].center_z, tracks[sdc_id].states[self.hist_len-1].heading) )
 
             # add sdc states into the array
             for i, sdc_state in enumerate(sdc_states):
                 if sdc_state.valid:
-                    ego_state = np.array([sdc_state.center_x, sdc_state.center_y, sdc_state.heading, sdc_state.velocity_x, 
-                                        sdc_state.velocity_y, sdc_state.length, sdc_state.width, sdc_state.height, 
+                    ego_state = np.array([sdc_state.center_x, sdc_state.center_y, sdc_state.heading, sdc_state.velocity_x,
+                                        sdc_state.velocity_y, sdc_state.length, sdc_state.width, sdc_state.height,
                                         ego_type])
                     ego_states[s,i] = ego_state
 
@@ -263,7 +265,7 @@ class DataProcess(object):
                 track_states = track.states[:self.hist_len]
                 if i not in sdc_ids and track_states[-1].valid:
                     xy = np.stack([track_states[-1].center_x, track_states[-1].center_y], axis=-1)
-                    neighbors.append((i, np.linalg.norm(xy - self.current_xyzh[e][:2]))) 
+                    neighbors.append((i, np.linalg.norm(xy - self.current_xyzh[e][:2])))
 
         # sort the agents by distance
         sorted_neighbors = sorted(neighbors, key=lambda item: item[1])
@@ -282,13 +284,13 @@ class DataProcess(object):
             self.neighbors_type.append(neighbor_type)
             if neighbor_type <= 0 or neighbor_type > 3:
                 neighbor_type = 0
-                
+
             self.neighbors_id.append(neighbor_id)
-            
+
             for i, neighbor_state in enumerate(neighbor_states):
-                if neighbor_state.valid: 
-                    neighbors_states[added_num, i] = np.array([neighbor_state.center_x, neighbor_state.center_y, neighbor_state.heading,  neighbor_state.velocity_x, 
-                                                               neighbor_state.velocity_y, neighbor_state.length, neighbor_state.width, neighbor_state.height, 
+                if neighbor_state.valid:
+                    neighbors_states[added_num, i] = np.array([neighbor_state.center_x, neighbor_state.center_y, neighbor_state.heading,  neighbor_state.velocity_x,
+                                                               neighbor_state.velocity_y, neighbor_state.length, neighbor_state.width, neighbor_state.height,
                                                                neighbor_type])
             added_num += 1
 
@@ -300,15 +302,15 @@ class DataProcess(object):
 
     def ground_truth_process(self, sdc_ids, tracks):
         ground_truth = np.zeros(shape=(2, self.future_len, 5))
-        
+
         for j, sdc_id in enumerate(sdc_ids):
             track_states = tracks[sdc_id].states[self.hist_len:]
             for i, track_state in enumerate(track_states):
-                ground_truth[j, i] = np.stack([track_state.center_x, track_state.center_y, track_state.heading, 
+                ground_truth[j, i] = np.stack([track_state.center_x, track_state.center_y, track_state.heading,
                                             track_state.velocity_x, track_state.velocity_y], axis=-1)
 
         return ground_truth.astype(np.float32)
-    
+
     def get_static_region(self,ego):
         region_dict = {}
         for c in [6,32,64]:
@@ -335,22 +337,22 @@ class DataProcess(object):
     def normalize_data(self, ego, neighbors, map_lanes, map_crosswalks, ground_truth, viz=False):
         # get the center and heading (local view)
         center, angle = ego[0].copy()[-1][:2], ego[0].copy()[-1][2]
-        
+
         # normalize agent trajectories
         ego[0, :, :5] = agent_norm(ego[0], center, angle, impute=True)
         ego[1, :, :5] = agent_norm(ego[1], center, angle, impute=True)
 
-        ground_truth[0] = agent_norm(ground_truth[0], center, angle) 
-        ground_truth[1] = agent_norm(ground_truth[1], center, angle) 
+        ground_truth[0] = agent_norm(ground_truth[0], center, angle)
+        ground_truth[1] = agent_norm(ground_truth[1], center, angle)
 
         for i in range(neighbors.shape[0]):
             if neighbors[i, -1, 0] != 0:
-                neighbors[i, :, :5] = agent_norm(neighbors[i], center, angle, impute=True) 
+                neighbors[i, :, :5] = agent_norm(neighbors[i], center, angle, impute=True)
 
         if self.point_dir != '':
-            region_dict = self.get_static_region(ego) 
+            region_dict = self.get_static_region(ego)
         else:
-            region_dict = None      
+            region_dict = None
 
         # normalize map points
         for i in range(map_lanes.shape[0]):
@@ -376,14 +378,14 @@ class DataProcess(object):
 
                 future = ground_truth[i][ground_truth[i][:, 0] != 0]
                 plt.plot(future[:, 0], future[:, 1], 'r', linewidth=1, zorder=3)
-            
+
             for i in range(neighbors.shape[0]):
                 if neighbors[i, -1, 0] != 0:
-                    rect = plt.Rectangle((neighbors[i, -1, 0]-neighbors[i, -1, 5]/2, neighbors[i, -1, 1]-neighbors[i, -1, 6]/2), 
+                    rect = plt.Rectangle((neighbors[i, -1, 0]-neighbors[i, -1, 5]/2, neighbors[i, -1, 1]-neighbors[i, -1, 6]/2),
                                           neighbors[i, -1, 5], neighbors[i, -1, 6], linewidth=1.5, color='m', alpha=0.6, zorder=3,
                                           transform=mpl.transforms.Affine2D().rotate_around(*(neighbors[i, -1, 0], neighbors[i, -1, 1]), neighbors[i, -1, 2]) + plt.gca().transData)
                     plt.gca().add_patch(rect)
-            
+
             for i in range(map_lanes.shape[0]):
                 lanes = map_lanes[i]
                 crosswalks = map_crosswalks[i]
@@ -404,7 +406,7 @@ class DataProcess(object):
                 if crosswalk[0][0] != 0:
                     crosswalk = crosswalk[crosswalk[:, 0] != 0]
                     plt.plot(crosswalk[:, 0], crosswalk[:, 1], 'b', linewidth=1) # plot crosswalk
-            
+
             if self.point_dir != '':
                 for i in range(region_dict[32].shape[0]):
                     plt.scatter(region_dict[32][i,:,0],region_dict[32][i,:,1],marker='*',s=10)
@@ -414,7 +416,7 @@ class DataProcess(object):
             plt.close()
 
         return ego, neighbors, map_lanes, map_crosswalks, ground_truth,region_dict
-    
+
     def interactive_process(self,tracks_list,interesting_ids,tracks):
         self.sdc_ids_list = []
 
@@ -447,8 +449,40 @@ class DataProcess(object):
             for can in sorted_candidate:
                 self.sdc_ids_list.append(((ego_id, can[0]), 0))
 
+    def extract_camera_tokens(self, parsed_data):
+        print(f"Extracting camera tokens for scenario {parsed_data.scenario_id}...")
+
+
+        camera_array = np.zeros((self.hist_len, 8, 256), dtype=np.int32)
+
+        if len(parsed_data.frame_camera_tokens) == 0:
+            scenario_id = parsed_data.scenario_id
+            camera_file = f'{self.camera_dir}/{scenario_id}.tfrecord'
+            try:
+                camera_dataset = tf.data.TFRecordDataset(camera_file)
+                for cam_data in camera_dataset:
+                    camera_scenario = scenario_pb2.Scenario()
+                    camera_scenario.ParseFromString(cam_data.numpy())
+                    parsed_data.frame_camera_tokens.MergeFrom(camera_scenario.frame_camera_tokens)
+                    break
+            except:
+                pass
+
+        if len(parsed_data.frame_camera_tokens) > 0:
+            print(f"Camera tokens found for scenario {parsed_data.scenario_id}. Dimensions: {len(parsed_data.frame_camera_tokens)} frames, {len(parsed_data.frame_camera_tokens[0].camera_tokens)} cameras per frame.")
+
+            for frame_idx, frame in enumerate(parsed_data.frame_camera_tokens):
+                if frame_idx >= self.hist_len:
+                    break
+                for cam_idx, cam in enumerate(frame.camera_tokens):
+                    if cam_idx >= 8:
+                        break
+                    tokens = list(cam.tokens)
+                    camera_array[frame_idx, cam_idx, :len(tokens)] = [t + 1 for t in tokens]
+        return camera_array
+
     def process_data(self, viz=True,test=False):
-        
+
         if self.point_dir != '':
             self.build_points()
 
@@ -460,7 +494,7 @@ class DataProcess(object):
             for data in dataset:
                 parsed_data = scenario_pb2.Scenario()
                 parsed_data.ParseFromString(data.numpy())
-                
+
                 scenario_id = parsed_data.scenario_id
 
                 self.scenario_id = scenario_id
@@ -477,17 +511,18 @@ class DataProcess(object):
                     interact_list.append(id_list[int_id])
 
                 self.build_map(parsed_data.map_features, parsed_data.dynamic_map_states)
+                camera_tokens = self.extract_camera_tokens(parsed_data)
 
                 if test:
                     if parsed_data.tracks[tracks_to_predict[0].track_index].object_type==1:
                         self.sdc_ids_list = [([tracks_list[1], tracks_list[0]],1)]
                     else:
-                        self.sdc_ids_list = [(tracks_list,1)] 
+                        self.sdc_ids_list = [(tracks_list,1)]
                 else:
                     self.interactive_process(tracks_list, interact_list, parsed_data.tracks)
 
                 for pairs in self.sdc_ids_list:
-                    sdc_ids, interesting = pairs[0], pairs[1]                   
+                    sdc_ids, interesting = pairs[0], pairs[1]
                     # process data
                     ego = self.ego_process(sdc_ids, parsed_data.tracks)
 
@@ -517,21 +552,23 @@ class DataProcess(object):
                     inter = 'interest' if interesting==1 else 'r'
                     filename = self.save_dir + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
                     if test:
-                        np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
+                        np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes),
                         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]))
+                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
+                        camera_tokens=camera_tokens)
                     else:
-                        np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
+                        np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes),
                         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth))
-                
+                        object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth),
+                        camera_tokens=camera_tokens)
+
                 self.pbar.update(1)
 
             self.pbar.close()
 
 def parallel_process(root_dir):
     print(root_dir)
-    processor = DataProcess(root_dir=[root_dir], point_dir=point_path, save_dir=save_path) 
+    processor = DataProcess(root_dir=[root_dir], point_dir=point_path, save_dir=save_path, camera_dir=camera_dir)
     processor.process_data(viz=debug,test=test)
     print(f'{root_dir}-done!')
 
@@ -545,20 +582,21 @@ if __name__ == "__main__":
     parser.add_argument('--debug', action="store_true", help='visualize processed data', default=False)
     parser.add_argument('--test', action="store_true", help='whether to process testing set', default=False)
     parser.add_argument('--use_multiprocessing', action="store_true", help='use multiprocessing', default=False)
-    
+    parser.add_argument('--camera_dir', type=str, help='path to load camera tokens (Currently not included in the pipeline)', default='')
+
     args = parser.parse_args()
     data_files = glob.glob(args.load_path+'/*')
     save_path = args.save_path
     point_path = args.point_path
     debug = args.debug
     test = args.test
+    camera_dir = args.camera_dir
     os.makedirs(save_path, exist_ok=True)
 
     if args.use_multiprocessing:
         with Pool(processes=args.processes) as p:
             p.map(parallel_process, data_files)
     else:
-        processor = DataProcess(root_dir=data_files, point_dir=point_path, save_dir=save_path) 
+        processor = DataProcess(root_dir=data_files, point_dir=point_path, save_dir=save_path, camera_dir=camera_dir)
         processor.process_data(viz=debug,test=test)
     print('Done!')
-  
