@@ -41,8 +41,8 @@ def training_epoch(train_data, model, optimizer, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
-            'camera_tokens': batch[7].to(args.local_rank),
-            'lidar_bev': batch[7].float().to(args.local_rank),
+                'camera_tokens': batch[7].to(args.local_rank),
+                'lidar_bev': batch[8].float().to(args.local_rank),
         }
 
         ego_future = batch[4].to(args.local_rank)
