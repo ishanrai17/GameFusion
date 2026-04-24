@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+  Training Script for GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
+"""
+
 import torch
 import sys
 sys.path.append('..')
@@ -16,6 +25,7 @@ from utils.inter_pred_utils import *
 
 # define model training epoch
 def training_epoch(train_data, model, optimizer, epoch):
+    """Train the model for one epoch, computing the loss and motion metrics for each batch."""
     epoch_loss = []
     model.train()
     current = 0
@@ -31,7 +41,8 @@ def training_epoch(train_data, model, optimizer, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
-            'camera_tokens': batch[7].to(args.local_rank)
+            'camera_tokens': batch[7].to(args.local_rank),
+            'lidar_bev': batch[7].float().to(args.local_rank),
         }
 
         ego_future = batch[4].to(args.local_rank)
@@ -70,6 +81,7 @@ def training_epoch(train_data, model, optimizer, epoch):
 
 # define model validation epoch
 def validation_epoch(valid_data, model, epoch):
+    """Validate the model for one epoch, computing the loss and motion metrics for each batch and aggregating the results."""
     epoch_metrics = MotionMetrics()
 
     model.eval()
@@ -89,7 +101,8 @@ def validation_epoch(valid_data, model, epoch):
             'neighbors_state': batch[1].to(args.local_rank),
             'map_lanes': batch[2].to(args.local_rank),
             'map_crosswalks': batch[3].to(args.local_rank),
-            'camera_tokens': batch[7].to(args.local_rank)
+            'camera_tokens': batch[7].to(args.local_rank),
+            'lidar_bev': batch[7].float().to(args.local_rank),
         }
 
         ego_future = batch[4].to(args.local_rank)

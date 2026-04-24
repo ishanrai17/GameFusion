@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+  Visualization and Testing Script for Interaction Prediction with GameFormer
+"""
+
 import sys
 sys.path.append("..")
 import glob

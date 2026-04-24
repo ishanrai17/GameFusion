@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+    GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
+"""
+
 import math
 import torch
 import torch.nn as nn
@@ -290,3 +299,23 @@ class InteractionDecoder(nn.Module):
         trajectories[..., :2] += current_states[:, id, None, None, :2]
 
         return query_content, trajectories, scores
+    
+
+
+class LiDAREncoder(nn.Module):
+    def __init__(self):
+        super(LiDAREncoder, self).__init__()
+        self.conv1 = nn.Conv3d(12, 64, kernel_size=3, stride=(2, 4, 4), padding=1)   
+        self.conv2 = nn.Conv3d(64, 128, kernel_size=3, stride=(2, 4, 4), padding=1)  
+        self.conv3 = nn.Conv3d(128, 256, kernel_size=3, stride=(3, 4, 4), padding=0)
+        self.dropout =nn.Dropout(0.2)
+        self.fnn_block = nn.Linear(256, 256)
+
+    def forward(self, inputs):
+        x = nn.ReLU()(self.conv1(inputs))
+        x = nn.ReLU()(self.conv2(x))
+        x = nn.ReLU()(self.conv3(x))
+        x = self.dropout(x)
+        x = x.flatten(2).transpose(1, 2)
+        x = self.fnn_block(x)
+        return x

@@ -61,6 +61,28 @@ The encoder (`model/modules.py`, `CameraTokenEncoder`) converts the raw token ID
 | **Zero-initialized output projection** | Camera branch starts as a **no-op** — the model can train stably from a pretrained GameFormer checkpoint without the camera signal disrupting learned features. The camera gradually "turns on" as its weights train. |
 | **5x learning rate for camera params** | Compensates for zero-init cold start; camera parameters need to catch up to the already-warm trajectory/map encoders |
 
+# LiDAR Data Processing & Encoding
+
+To effectively integrate raw, continuous 3D LiDAR data into the GameFormer architecture, we employ a structured Bird's Eye View (BEV) representation combined with early temporal fusion. This allows the network to extract dense, low-level kinematics while managing the heavy computational constraints of 3D point clouds.
+
+## Data Preprocessing
+Before entering the neural network, the raw LiDAR point clouds undergo several critical transformations:
+* **Agent-Centric Coordinate Normalization:** To ensure spatial generalization and rotation/translation invariance, the LiDAR data is transformed from ego-centric coordinates to agent-centric coordinates. By setting the target agent as the origin (0,0) and aligning its heading to the +X axis, we decouple the agent's kinematics from the ego-vehicle's motion. This prevents the network from wasting computational capacity learning to subtract the autonomous vehicle's velocity from the scene.
+* **Voxelization (BEV Grids):** Point-based processing across multiple temporal frames exceeds standard computational budgets. We solve this by discretizing the unstructured 3D point cloud into a structured Bird's Eye View spatial grid, creating a uniform format suitable for 3D Convolutions. 
+* **Early Temporal Fusion:** Autonomous driving is a 4D spatio-temporal problem. Rather than processing frames individually (which risks kinematic blindness), we stack the temporal sweeps into the channel dimension. This allows the network to extract coupled motion features—like velocity and acceleration—directly from raw geometric displacements.
+
+## LiDAREncoder Architecture
+The `LiDAREncoder` is a custom 3-layer 3D Convolutional Neural Network (CNN) designed to process the multi-frame BEV grids and project them into the Transformer's latent space.
+
+* **Spatio-Temporal Extraction:** The network utilizes 3D Convolutional layers with ReLU activations to simultaneously scan across the spatial ($X, Y$) and temporal ($Z$/channel) dimensions.
+* **Spatial Decimation:** To strictly manage the parameter count and memory overhead before feeding data to the Transformer, the network employs aggressive spatial downsampling with a spatial stride of `4` across all three convolutional layers. *(Note: This architectural trade-off serves as a massive regularizer for training stability, though it establishes a resolution bottleneck by compressing fine geometric details).*
+* **Feature Projection:** Following the convolutions and a `0.2` Dropout layer, the spatial dimensions are flattened, and the features are passed through a Feed-Forward Network to generate 256-dimensional tokens.
+
+## LiDAR - GameFormer Transformer Integration
+Once the LiDAR BEV grid is processed by the `LiDAREncoder`, it is integrated into the primary GameFormer Transformer pipeline alongside map and agent data:
+* **Dynamic Masking:** Because LiDAR point clouds are inherently sparse, the pipeline calculates a boolean `lidar_mask` by identifying entirely empty spatial bins `(lidar_bev.sum == 0)`. This mask prevents the Transformer's attention mechanism from wasting compute on empty space.
+* **Attention Fusion:** The encoded LiDAR tokens are concatenated directly with the encoded actors, map lanes, crosswalks, and camera tokens. This creates a massive multimodal context vector that is passed into the multi-layer Transformer Encoder, allowing the network to cross-attend between the dense physical geometry of the LiDAR and the high-level semantic intents of the vector data.
+
 ### Fusion into the Encoder
 
 In `model/GameFormer.py`, the `Encoder` concatenates the 8 camera feature vectors as additional sequence elements alongside the encoded agents, lanes, and crosswalks before passing everything through the 6-layer fusion `TransformerEncoder`. If no camera tokens are available, the model falls back to the original agent + map fusion without any code path changes.

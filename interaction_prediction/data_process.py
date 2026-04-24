@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+  data_process.py: Data processing script for Interaction Prediction with GameFormer
+"""
+
 import glob
 import sys
 sys.path.append("..")
@@ -14,10 +23,12 @@ from waymo_open_dataset.protos import scenario_pb2
 from utils.data_utils import *
 import os
 import pickle
+import subprocess
 
 tf.config.set_visible_devices([], 'GPU')
 
 class DataProcess(object):
+    """Data processing class for Interaction Prediction with GameFormer"""
     def __init__(
                 self,
                 root_dir=[''],
@@ -37,6 +48,7 @@ class DataProcess(object):
 
 
     def build_points(self):
+        """Build the static region points for different object types and point numbers"""
         self.points_dict = {}
         for obj_type in ['vehicle','pedestrian','cyclist']:
             for c in [6,32,64]:
@@ -46,6 +58,7 @@ class DataProcess(object):
                 self.points_dict[f'{obj_type}_{c}'] = data
 
     def build_map(self, map_features, dynamic_map_states):
+        """Build the map features for a scenario, including lanes, road lines and edges, stop signs, crosswalks, speed bumps, and traffic signals"""
         self.lanes = {}
         self.roads = {}
         self.stop_signs = {}
@@ -232,6 +245,9 @@ class DataProcess(object):
         return vectorized_map.astype(np.float32), vectorized_crosswalks.astype(np.float32)
 
     def ego_process(self, sdc_ids, tracks):
+        """
+        Process the states of the ego vehicle.
+        """
         ego_states = np.zeros(shape=(2, self.hist_len, 9))
         self.current_xyzh = []
         for s,sdc_id in enumerate(sdc_ids):
@@ -254,6 +270,7 @@ class DataProcess(object):
         return ego_states.astype(np.float32)
 
     def neighbors_process(self, sdc_ids, tracks):
+        """Process the states of the neighboring agents, including their positions, velocities, dimensions, and types."""
         neighbors_states = np.zeros(shape=(self.num_neighbors, self.hist_len, 9))
         neighbors = []
         self.neighbors_id = []
@@ -301,6 +318,7 @@ class DataProcess(object):
         return neighbors_states.astype(np.float32), self.neighbors_id
 
     def ground_truth_process(self, sdc_ids, tracks):
+        """Process the ground truth trajectories for the ego vehicle and interacting agents."""
         ground_truth = np.zeros(shape=(2, self.future_len, 5))
 
         for j, sdc_id in enumerate(sdc_ids):
@@ -312,6 +330,7 @@ class DataProcess(object):
         return ground_truth.astype(np.float32)
 
     def get_static_region(self,ego):
+        """Build the static region points for different object types and point numbers."""
         region_dict = {}
         for c in [6,32,64]:
             region = []
@@ -335,6 +354,7 @@ class DataProcess(object):
         return region_dict
 
     def normalize_data(self, ego, neighbors, map_lanes, map_crosswalks, ground_truth, viz=False):
+        """Normalize the data for the ego vehicle and interacting agents."""
         # get the center and heading (local view)
         center, angle = ego[0].copy()[-1][:2], ego[0].copy()[-1][2]
 
@@ -418,6 +438,7 @@ class DataProcess(object):
         return ego, neighbors, map_lanes, map_crosswalks, ground_truth,region_dict
 
     def interactive_process(self,tracks_list,interesting_ids,tracks):
+
         self.sdc_ids_list = []
 
         for ego_id in tracks_list:
@@ -450,6 +471,7 @@ class DataProcess(object):
                 self.sdc_ids_list.append(((ego_id, can[0]), 0))
 
     def extract_camera_tokens(self, parsed_data):
+        """Extract the camera tokens for a scenario, which represent the visual context of the scene."""
         print(f"Extracting camera tokens for scenario {parsed_data.scenario_id}...")
 
 
@@ -482,7 +504,7 @@ class DataProcess(object):
         return camera_array
 
     def process_data(self, viz=True,test=False):
-
+        """Process the data for all scenarios, including building map features, extracting camera tokens, normalizing trajectories, and saving the processed data."""
         if self.point_dir != '':
             self.build_points()
 
@@ -520,7 +542,7 @@ class DataProcess(object):
                         self.sdc_ids_list = [(tracks_list,1)]
                 else:
                     self.interactive_process(tracks_list, interact_list, parsed_data.tracks)
-
+                lidar_frames = self.get_lidar_point(parsed_data)
                 for pairs in self.sdc_ids_list:
                     sdc_ids, interesting = pairs[0], pairs[1]
                     # process data
@@ -546,6 +568,17 @@ class DataProcess(object):
                         ground_truth = self.ground_truth_process(sdc_ids, parsed_data.tracks)
                     ego, neighbors, map_lanes, map_crosswalks, ground_truth,region_dict = self.normalize_data(ego, neighbors, map_lanes, map_crosswalks, ground_truth, viz=viz)
 
+                    center, angle = np.array(self.current_xyzh[0][:2]), self.current_xyzh[0][3]
+                    if len(lidar_frames) > 0 and not self.ignore_lidar_bev:
+                        bev_frames = []
+                        for lidar_pts in lidar_frames:
+                            lidar_pts_norm = self.normalize_lidar_points(lidar_pts, center, angle)
+                            bev = self.extract_lidar_bev(lidar_pts_norm, -75, 75, -75, 75, -2, 4, 0.5, 0.5)
+                            bev_frames.append(bev)
+                        lidar_bev = np.array(bev_frames, dtype=np.uint8)
+                    else:
+                        lidar_bev = np.zeros((11, 12, 300, 300), dtype=np.uint8)
+                        
                     if self.point_dir == '':
                         region_dict = {6:np.zeros((6,2))}
                     # save data
@@ -555,18 +588,164 @@ class DataProcess(object):
                         np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes),
                         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
                         object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
-                        camera_tokens=camera_tokens)
+                        camera_tokens=camera_tokens, lidar_bev=lidar_bev)
                     else:
                         np.savez(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes),
                         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
                         object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth),
-                        camera_tokens=camera_tokens)
+                        camera_tokens=camera_tokens, lidar_bev=lidar_bev)
 
                 self.pbar.update(1)
 
             self.pbar.close()
+            
+    def extract_lidar_bev(self, points, x_min, x_max, y_min, y_max, z_min, z_max, xy_res, z_res):
+        """Extract a bird's eye view (BEV) representation from LiDAR points."""
+        grid_x = round((x_max - x_min) / xy_res)
+        grid_y = round((y_max - y_min) / xy_res)
+        grid_z = round((z_max - z_min) / z_res)
+
+        voxel_grid = np.zeros((grid_z, grid_x, grid_y), dtype=np.float32)
+
+        x_vals = points[:, 0]
+        y_vals = points[:, 1]
+        z_vals = points[:, 2]
+
+        # Correct formula: (value - min) / resolution
+        x_bins = ((x_vals - x_min) / xy_res).astype(int)
+        y_bins = ((y_vals - y_min) / xy_res).astype(int)
+        z_bins = ((z_vals - z_min) / z_res).astype(int)
+
+        # Clamp to valid range
+        mask = (
+            (0 <= x_bins) & (x_bins < grid_x) &
+            (0 <= y_bins) & (y_bins < grid_y) &
+            (0 <= z_bins) & (z_bins < grid_z)
+        )
+
+        voxel_grid[z_bins[mask], x_bins[mask], y_bins[mask]] = 1.0
+
+        return voxel_grid
+
+    def normalize_lidar_points(self, pts, center, angle):
+        """
+        Normalize LiDAR points by translating to the center and rotating by the negative angle.
+        """
+        # Translate
+        pts_norm = pts.copy()
+        pts_norm[:, 0] -= center[0]
+        pts_norm[:, 1] -= center[1]
+        
+        # Rotate by -angle (standard 2D rotation matrix)
+        cos_a = np.cos(-angle)
+        sin_a = np.sin(-angle)
+        x_rot = cos_a * pts_norm[:, 0] - sin_a * pts_norm[:, 1]
+        y_rot = sin_a * pts_norm[:, 0] + cos_a * pts_norm[:, 1]
+        
+        pts_norm[:, 0] = x_rot
+        pts_norm[:, 1] = y_rot
+        # Z unchanged
+        
+        return pts_norm
+
+    def get_lidar_point(self, scenario):
+        """Extract LiDAR points for each frame in the scenario, transforming them to the global frame and preserving the original Z values."""
+        all_frames = []
+        for frame in scenario.compressed_frame_laser_data:
+            pose = tf.constant(list(frame.pose.transform), dtype=tf.float64)
+            pose = tf.reshape(pose, [4, 4])
+            calibs = {c.name: c for c in frame.laser_calibrations}
+
+            all_points = []
+            for laser in frame.lasers:
+                calib = calibs[laser.name]
+                if laser.name == 1:
+                    xyz_ri1, _, xyz_ri2, _ = womd_lidar_utils.extract_top_lidar_points(
+                        laser, pose, calib)
+                else:
+                    xyz_ri1, _, xyz_ri2, _ = womd_lidar_utils.extract_side_lidar_points(
+                        laser, calib)
+                all_points.append(xyz_ri1.numpy())
+                all_points.append(xyz_ri2.numpy())
+
+            pts = np.concatenate(all_points, axis=0)
+            
+            # Save original Z 
+            z_vehicle = pts[:, 2].copy()
+            
+            # Transform XY to global frame for alignment with trajectories
+            pose_np = pose.numpy()
+            ones = np.ones((pts.shape[0], 1))
+            pts_h = np.concatenate([pts, ones], axis=1)
+            pts_global = (pose_np @ pts_h.T).T[:, :3]
+            
+            # Replace Z with vehicle-frame Z
+            pts_global[:, 2] = z_vehicle
+            
+            all_frames.append(pts_global)
+        
+        return all_frames
+    
+    def merge_sensors_with_scenario(self, shard_dataset, shard_id, split_type):
+        """Merge the LiDAR and camera data with the scenario data for a given shard, writing the merged data to a new TFRecord file."""
+        os.makedirs("/content/data/lidar_and_camera", exist_ok=True)
+        os.makedirs(self.merger_save_path, exist_ok=True)
+        output_path = f"{self.merger_save_path}/merged_{split_type}_shard-{shard_id}.tfrecord"
+
+        # First pass: collect all scenario IDs
+        scenario_ids = []
+        for data in shard_dataset:
+            scenario = scenario_pb2.Scenario()
+            scenario.ParseFromString(data.numpy())
+            scenario_ids.append(scenario.scenario_id)
+        print(f"Found {len(scenario_ids)} scenarios in shard")
+
+        # Download in batches of 2
+        batch_size = 2
+        for i in tqdm(range(0, len(scenario_ids), batch_size), desc="Downloading sensor data" ):
+            batch = scenario_ids[i:i+batch_size]
+            paths_file = "/content/data/paths.txt"
+            with open(paths_file, "w") as f:
+                for sid in batch:
+                    f.write(f"gs://waymo_open_dataset_motion_v_1_3_0/uncompressed/lidar_and_camera/{split_type}/{sid}.tfrecord\n")
+            
+            result = subprocess.run(
+                ["bash", "-c", f"cat {paths_file} | gsutil -m cp -I /content/data/lidar_and_camera/"],
+                capture_output=True, text=True
+            )
+            # print(f"Batch {i//batch_size + 1}: downloaded {len(batch)} files")
+            if result.returncode != 0:
+                print(f"Error: {result.stderr[-300:]}")
+
+        downloaded = os.listdir("/content/data/lidar_and_camera/")
+        print(f"Total downloaded: {len(downloaded)} / {len(scenario_ids)}")
+
+        # Second pass: merge and write
+        writer = tf.io.TFRecordWriter(output_path)
+        merged = 0
+
+        for data in tqdm(shard_dataset, desc="Merging"):
+            scenario = scenario_pb2.Scenario()
+            scenario.ParseFromString(data.numpy())
+            scenario_id = scenario.scenario_id
+
+            lidar_cam_path = f"/content/data/lidar_and_camera/{scenario_id}.tfrecord"
+            if os.path.exists(lidar_cam_path):
+                lidar_data = next(iter(tf.data.TFRecordDataset(lidar_cam_path)))
+                lidar_cam = scenario_pb2.Scenario()
+                lidar_cam.ParseFromString(lidar_data.numpy())
+                scenario.compressed_frame_laser_data.MergeFrom(lidar_cam.compressed_frame_laser_data)
+                scenario.frame_camera_tokens.MergeFrom(lidar_cam.frame_camera_tokens)
+                merged += 1
+
+            writer.write(scenario.SerializeToString())
+
+        writer.close()
+        print(f"Done! Merged: {merged} / {len(scenario_ids)}")
+
 
 def parallel_process(root_dir):
+    """Function to process data in parallel for a given root directory."""
     print(root_dir)
     processor = DataProcess(root_dir=[root_dir], point_dir=point_path, save_dir=save_path, camera_dir=camera_dir)
     processor.process_data(viz=debug,test=test)

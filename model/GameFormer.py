@@ -1,3 +1,12 @@
+"""
+  Rohith Kumar Senthil Kumar
+  Ishan Rai
+  5330 Computer Vision
+  Ying-Jen Chiang
+  Final Project 5
+    GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
+"""
+
 import torch
 from .modules import *
 
@@ -12,11 +21,13 @@ class Encoder(nn.Module):
         self.lane_encoder = LaneEncoder()
         self.crosswalk_encoder = CrosswalkEncoder()
         self.camera_encoder = CameraTokenEncoder()
+        self.lidar_encoder = LiDAREncoder()
         attention_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=dim*4,
                                                      activation=F.gelu, dropout=dropout, batch_first=True)
         self.fusion_encoder = nn.TransformerEncoder(attention_layer, layers, enable_nested_tensor=False)
 
     def segment_map(self, map, map_encoding):
+        """Segment the map encoding into smaller patches and create a corresponding mask for the segments."""
         stride = 10
         B, N_e, N_p, D = map_encoding.shape
 
@@ -31,6 +42,7 @@ class Encoder(nn.Module):
         return map_encoding, map_mask
 
     def forward(self, inputs):
+        """Transform the input features through the encoder. The encoder processes the agent states, map features, camera tokens, and LiDAR BEV features, applying attention fusion to produce the final encodings and masks for each agent."""
         # agent encoding
         ego = inputs['ego_state']
         neighbors = inputs['neighbors_state']
@@ -52,6 +64,15 @@ class Encoder(nn.Module):
             encoded_camera, camera_mask = self.camera_encoder(camera_tokens.long())
         else:
             encoded_camera = None
+            
+        # lidar encoding
+        lidar_bev = inputs['lidar_bev']
+        # (B, 16, 256)                    
+        encoded_lidar = self.lidar_encoder(lidar_bev)
+        lidar_tokens = encoded_lidar.shape[1]   
+        # lidar mask
+        lidar_mask = (lidar_bev.sum(dim=(1,2,3,4))==0)
+        lidar_mask = lidar_mask.unsqueeze(1).expand(-1, lidar_tokens)
 
         # attention fusion
         encodings = []
@@ -63,8 +84,8 @@ class Encoder(nn.Module):
             lanes, lanes_mask = self.segment_map(map_lanes[:, i], encoded_map_lanes[:, i])
             crosswalks, crosswalks_mask = self.segment_map(map_crosswalks[:, i], encoded_map_crosswalks[:, i])
             if encoded_camera is not None:
-                fusion_input = torch.cat([encoded_actors, lanes, crosswalks, encoded_camera], dim=1)
-                mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask, camera_mask], dim=1)
+                fusion_input = torch.cat([encoded_actors, lanes, crosswalks, encoded_camera, encoded_lidar], dim=1)
+                mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask, camera_mask, lidar_mask], dim=1)
             else:
                 fusion_input = torch.cat([encoded_actors, lanes, crosswalks], dim=1)
                 mask = torch.cat([actors_mask, lanes_mask, crosswalks_mask], dim=1)
@@ -85,6 +106,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
+    """The decoder takes the encoded features from the encoder and performs multi-level reasoning to predict the interactions between the agents. It consists of an initial decoding stage that produces the first level of interaction predictions, followed by multiple interaction decoding stages that refine the predictions based on the previous level's outputs."""
     def __init__(self, modalities, future_len, neighbors_to_predict, levels=3):
         super(Decoder, self).__init__()
         self._levels = levels
@@ -124,6 +146,7 @@ class Decoder(nn.Module):
 
 
 class GameFormer(nn.Module):
+    """A multi-level transformer for interaction prediction in autonomous driving."""
     def __init__(self, modalities, neighbors_to_predict, future_len, encoder_layers=6, decoder_levels=4):
         super(GameFormer, self).__init__()
         self.encoder = Encoder(neighbors_to_predict, encoder_layers)
