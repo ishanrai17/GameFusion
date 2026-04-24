@@ -1,9 +1,9 @@
 """
   Rohith Kumar Senthil Kumar
   Ishan Rai
-  5330 Computer Vision
   Ying-Jen Chiang
-  Final Project 5
+  5330 Computer Vision
+  Final Project 
   Visualization and Testing Script for Interaction Prediction with GameFormer
 """
 

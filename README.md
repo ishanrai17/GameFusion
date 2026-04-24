@@ -143,9 +143,11 @@ Run `data_process.py` with `--load_path` (Waymo TFRecords), `--save_path` (outpu
 | `map_crosswalks` | (2, 4, 100, 3) | Crosswalk features per agent |
 | `gt_future_states` | (2, 80, 5) | Ground truth futures (train only) |
 | **`camera_tokens`** | **(11, 8, 256)** | **Discretized camera tokens (our addition)** |
+| **`lidar_bev`** | **(12, 11, 300, 300)** | **BEV LiDAR data (our addition)** |
 | `object_type` | (2,) | Agent types (1=vehicle, 2=pedestrian, 3=cyclist) |
 | `object_index` | (2,) | Waymo track IDs |
 | `current_state` | (4,) | (x, y, z, heading) at t=0 |
+
 
 ---
 
@@ -174,9 +176,11 @@ Camera fusion ablations are tracked across branches:
 | Branch | Description |
 |---|---|
 | `version/modalities/base` | Baseline — original GameFormer, no camera |
+| `versions/modalities/baseline-plus-lidar` | GameFormer + LiDAR |
 | `version/modalities/agent-camera` | GameFormer + Camera (V1) |
 | `version/modalities/final` | GameFormer + Camera (V2) |
 | `versions/best-performer` | GameFormer + Camera (V3) — best result |
+
 
 ---
 

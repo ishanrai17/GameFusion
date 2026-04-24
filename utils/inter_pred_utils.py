@@ -1,9 +1,9 @@
 """
   Rohith Kumar Senthil Kumar
   Ishan Rai
-  5330 Computer Vision
   Ying-Jen Chiang
-  Final Project 5
+  5330 Computer Vision
+  Final Project
     Interaction Prediction Utilities: This module provides utility functions for training and evaluating the GameFormer model, including loss functions for imitation learning and Gaussian Mixture Models (GMM), as well as a wrapper class for computing motion metrics based on the Waymo Open Dataset evaluation code. The utilities facilitate the calculation of losses during training and the evaluation of predicted trajectories against ground truth data, enabling the assessment of the model's performance in predicting interactions in autonomous driving scenarios.
 """
 

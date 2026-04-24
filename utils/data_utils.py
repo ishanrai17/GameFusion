@@ -1,9 +1,9 @@
 """
   Rohith Kumar Senthil Kumar
   Ishan Rai
-  5330 Computer Vision
   Ying-Jen Chiang
-  Final Project 5
+  5330 Computer Vision
+  Final Project
     Data Utilities: This module provides utility functions for processing and normalizing the input data for the GameFormer model, including functions for segmenting map encodings, normalizing agent trajectories and map features, and finding reference lanes and routes based on the agent's current position and the map data. The utilities facilitate the preparation of the input data for the model, ensuring that it is in the appropriate format and normalized for effective training and inference in predicting interactions in autonomous driving scenarios.
 """
 

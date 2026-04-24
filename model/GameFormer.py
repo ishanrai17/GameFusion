@@ -1,9 +1,9 @@
 """
   Rohith Kumar Senthil Kumar
   Ishan Rai
-  5330 Computer Vision
   Ying-Jen Chiang
-  Final Project 5
+  5330 Computer Vision
+  Final Project 
     GameFormer: A Multi-Level Transformer for Interaction Prediction in Autonomous Driving
 """
 
