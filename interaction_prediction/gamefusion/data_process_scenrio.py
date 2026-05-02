@@ -295,41 +295,54 @@ class DataProcessv1(DataProcess):
         
         return pts_norm
     
-    def get_lidar_point(self, scenario):
+    def get_lidar_point(scenario):
         all_frames = []
         for frame in scenario.compressed_frame_laser_data:
             pose = tf.constant(list(frame.pose.transform), dtype=tf.float64)
             pose = tf.reshape(pose, [4, 4])
+            pose_np = pose.numpy()
+
+            # Get the global elevation of the ego vehicle to shift Z down later
+            ego_global_z = pose_np[2, 3]
+
             calibs = {c.name: c for c in frame.laser_calibrations}
 
             all_points = []
             for laser in frame.lasers:
                 calib = calibs[laser.name]
+
                 if laser.name == 1:
+                    # Top LiDAR: Uses pose internally. Outputs in GLOBAL FRAME.
                     xyz_ri1, _, xyz_ri2, _ = womd_lidar_utils.extract_top_lidar_points(
                         laser, pose, calib)
+                    all_points.append(xyz_ri1.numpy())
+                    all_points.append(xyz_ri2.numpy())
+
                 else:
+                    # Side LiDARs: No pose used internally. Outputs in VEHICLE FRAME.
                     xyz_ri1, _, xyz_ri2, _ = womd_lidar_utils.extract_side_lidar_points(
                         laser, calib)
-                all_points.append(xyz_ri1.numpy())
-                all_points.append(xyz_ri2.numpy())
 
-            pts = np.concatenate(all_points, axis=0)
-            
-            # Save original Z 
-            z_vehicle = pts[:, 2].copy()
-            
-            # Transform XY to global frame for alignment with trajectories
-            pose_np = pose.numpy()
-            ones = np.ones((pts.shape[0], 1))
-            pts_h = np.concatenate([pts, ones], axis=1)
-            pts_global = (pose_np @ pts_h.T).T[:, :3]
-            
-            # Replace Z with vehicle-frame Z
-            pts_global[:, 2] = z_vehicle
-            
+                    def apply_pose(pts_tensor):
+                        pts = pts_tensor.numpy()
+                        if pts.shape[0] == 0:
+                            return pts
+                        # Transform Vehicle Frame to Global Frame
+                        pts_h = np.concatenate([pts, np.ones((pts.shape[0], 1))], axis=1)
+                        return (pose_np @ pts_h.T).T[:, :3]
+
+                    all_points.append(apply_pose(xyz_ri1))
+                    all_points.append(apply_pose(xyz_ri2))
+
+            # Now EVERY point is fully leveled in the Global Frame
+            pts_global = np.concatenate(all_points, axis=0)
+
+            # Shift the entire leveled point cloud down to a local Z range
+            # (so the ground sits around Z=0 instead of Z=150m)
+            pts_global[:, 2] -= ego_global_z
+
             all_frames.append(pts_global)
-        
+
         return all_frames
 
         
@@ -379,25 +392,25 @@ class DataProcessv1(DataProcess):
                     # process data
                     ego = self.ego_process(sdc_ids, parsed_data.tracks)
 
-                    ego_type = parsed_data.tracks[sdc_ids[0]].object_type
-                    neighbor_type = parsed_data.tracks[sdc_ids[1]].object_type
-                    object_type = np.array([ego_type, neighbor_type])
-                    self.object_type = object_type
-                    ego_index = parsed_data.tracks[sdc_ids[0]].id
-                    neighbor_index = parsed_data.tracks[sdc_ids[1]].id
-                    object_index = np.array([ego_index, neighbor_index])
+                    # ego_type = parsed_data.tracks[sdc_ids[0]].object_type
+                    # neighbor_type = parsed_data.tracks[sdc_ids[1]].object_type
+                    # object_type = np.array([ego_type, neighbor_type])
+                    # self.object_type = object_type
+                    # ego_index = parsed_data.tracks[sdc_ids[0]].id
+                    # neighbor_index = parsed_data.tracks[sdc_ids[1]].id
+                    # object_index = np.array([ego_index, neighbor_index])
 
-                    neighbors, _ = self.neighbors_process(sdc_ids, parsed_data.tracks)
-                    map_lanes = np.zeros(shape=(2, 6, 300, 17), dtype=np.float32)
-                    map_crosswalks = np.zeros(shape=(2, 4, 100, 3), dtype=np.float32)
-                    map_lanes[0], map_crosswalks[0] = self.map_process(ego[0])
-                    map_lanes[1], map_crosswalks[1] = self.map_process(ego[1])
+                    # neighbors, _ = self.neighbors_process(sdc_ids, parsed_data.tracks)
+                    # map_lanes = np.zeros(shape=(2, 6, 300, 17), dtype=np.float32)
+                    # map_crosswalks = np.zeros(shape=(2, 4, 100, 3), dtype=np.float32)
+                    # map_lanes[0], map_crosswalks[0] = self.map_process(ego[0])
+                    # map_lanes[1], map_crosswalks[1] = self.map_process(ego[1])
 
-                    if test:
-                        ground_truth = np.zeros((2, self.future_len, 5))
-                    else:
-                        ground_truth = self.ground_truth_process(sdc_ids, parsed_data.tracks)
-                    ego, neighbors, map_lanes, map_crosswalks, ground_truth,region_dict = self.normalize_data(ego, neighbors, map_lanes, map_crosswalks, ground_truth, viz=viz)
+                    # if test:
+                    #     ground_truth = np.zeros((2, self.future_len, 5))
+                    # else:
+                    #     ground_truth = self.ground_truth_process(sdc_ids, parsed_data.tracks)
+                    # ego, neighbors, map_lanes, map_crosswalks, ground_truth,region_dict = self.normalize_data(ego, neighbors, map_lanes, map_crosswalks, ground_truth, viz=viz)
                     
                     center, angle = np.array(self.current_xyzh[0][:2]), self.current_xyzh[0][3]
                     
@@ -405,36 +418,36 @@ class DataProcessv1(DataProcess):
                         bev_frames = []
                         for lidar_pts in lidar_frames:
                             lidar_pts_norm = self.normalize_lidar_points(lidar_pts, center, angle)
-                            bev = self.extract_lidar_bev(lidar_pts_norm, -75, 75, -75, 75, -2, 4, 0.5, 0.5)
+                            bev = self.extract_lidar_bev(lidar_pts_norm, -74.8, 74.8, -74.8, 74.8, -0.8, 4, 0.2, 0.2)
                             bev_frames.append(bev)
                         lidar_bev = np.array(bev_frames, dtype=np.uint8)
                     else:
-                        lidar_bev = np.zeros((11, 12, 300, 300), dtype=np.uint8)
+                        lidar_bev = np.zeros((11, 24, 748, 748), dtype=np.uint8)
                     
                     if self.point_dir == '':
                         region_dict = {6:np.zeros((6,2))}
                     # save data
                     inter = 'interest' if interesting==1 else 'r'
-                    if not self.ignore_vectorized_data:
-                        os.makedirs(self.save_dir , exist_ok=True)
-                        filename = self.save_dir + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
-                        if test:
-                            np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
-                            map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                            object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
-                            lidar_bev=lidar_bev
-                            )
-                        else:
-                            np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
-                            map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
-                            object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth), 
-                            lidar_bev=lidar_bev
-                            )
+                    # if not self.ignore_vectorized_data:
+                    #     os.makedirs(self.save_dir , exist_ok=True)
+                    #     filename = self.save_dir + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
+                    #     if test:
+                    #         np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
+                    #         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
+                    #         object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),
+                    #         lidar_bev=lidar_bev
+                    #         )
+                    #     else:
+                    #         np.savez_compressed(filename, ego=np.array(ego), neighbors=np.array(neighbors), map_lanes=np.array(map_lanes), 
+                    #         map_crosswalks=np.array(map_crosswalks),object_type=np.array(object_type),region_6=np.array(region_dict[6]),
+                    #         object_index=np.array(object_index),current_state=np.array(self.current_xyzh[0]),gt_future_states=np.array(ground_truth), 
+                    #         lidar_bev=lidar_bev
+                    #         )
           
-                    # if not self.ignore_lidar_bev:
-                    #     os.makedirs(self.save_dir + "/lidar_bev", exist_ok=True)
-                    #     lidar_filename = self.save_dir + "/lidar_bev" + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
-                    #     np.savez_compressed(lidar_filename, lidar_bev=lidar_bev)
+                    if not self.ignore_lidar_bev:
+                        os.makedirs(self.save_dir + "/lidar_bev", exist_ok=True)
+                        lidar_filename = self.save_dir + "/lidar_bev" + f"/{scenario_id}_{sdc_ids[0]}_{sdc_ids[1]}_{inter}.npz"
+                        np.savez_compressed(lidar_filename, lidar_bev=lidar_bev)
                         
                 
                 self.pbar.update(1)
@@ -476,6 +489,7 @@ def merge_sensors_with_scenario_wrapper(processor, shards_path, split_type):
         processor.merge_sensors_with_scenario(shard_dataset, shard_id, split_type)
     else:
         for shard_id in shard_ids:
+            
             cmd = [
                     "gsutil", "-m", "cp",
                     f"gs://waymo_open_dataset_motion_v_1_3_0/uncompressed/scenario/{split_type}/{split_type}.tfrecord-{shard_id}",
