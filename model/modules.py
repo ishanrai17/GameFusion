@@ -505,7 +505,7 @@ class HierarchicalLiDARCNNMAE(nn.Module):
         return reconstruction
 
 
-    def forward(self, x):
+    def forward(self, x, return_decomposition=False):
         """End-to-End Pretraining Pass: Computes masked MSE reconstruction loss."""
         # 1. Generate the block mask
         mask = self.generate_patch_mask(x)
@@ -520,7 +520,17 @@ class HierarchicalLiDARCNNMAE(nn.Module):
         # SMART LOSS: Compute Mean Squared Error strictly on masked regions
         # ----------------------------------------------------------------------
         mse_loss = (reconstruction - x) ** 2
-        
+        if return_decomposition:
+            # Foreground: Error strictly where physical LiDAR points exist
+            fg_mask = (x > 0).float() * mask
+            fg_mse = (mse_loss * fg_mask).sum() / (fg_mask.sum() + 1e-8)
+            
+            # Background: Error strictly on empty space
+            bg_mask = (x == 0).float() * mask
+            bg_mse = (mse_loss * bg_mask).sum() / (bg_mask.sum() + 1e-8)
+            
+            total_mse = (mse_loss * mask).sum() / (mask.sum() + 1e-8)
+            return total_mse, fg_mse, bg_mse
         # Zero out errors on unmasked/visible pixels, average strictly across the hidden ones
         masked_mse_loss = (mse_loss * mask).sum() / (mask.sum() + 1e-8)
 

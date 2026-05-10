@@ -80,7 +80,8 @@ def validation_epoch(valid_data, model, epoch, args):
     start_time = time.time()
     size = len(valid_data)
     epoch_loss = []
-
+    epoch_fg_loss = []
+    epoch_bg_loss = []
     if dist.get_rank() == 0:
         logging.info(f'Validation... Epoch {epoch+1}')
 
@@ -95,20 +96,23 @@ def validation_epoch(valid_data, model, epoch, args):
         x_folded = x_permuted.view(B * T, C, H, W)
 
         with torch.no_grad():
-            loss = model(x_folded)
-
+            loss, fg_loss, bg_loss = model(x_folded, return_decomposition=True)
         current += B
         epoch_loss.append(loss.item())
-
-        # CRITICAL FIX: Log exactly ONCE here, after the entire validation loop finishes
-        if dist.get_rank() == 0:
-            elapsed_time = time.time() - start_time
-            logging.info(
-                f"Valid Epoch {epoch+1} Summary | Val MSE Loss: {np.mean(epoch_loss):.6f} | " +
-                f"Total Time: {elapsed_time:.2f}s"
-            )
+        epoch_fg_loss.append(fg_loss.item())
+        epoch_bg_loss.append(bg_loss.item())
         del lidar_sequence, x, x_permuted, x_folded, loss
         torch.cuda.empty_cache()
+
+        # CRITICAL FIX: Log exactly ONCE here, after the entire validation loop finishes
+    if dist.get_rank() == 0:
+        elapsed_time = time.time() - start_time
+        logging.info(
+            f"Valid Epoch {epoch+1} Summary | Overall MSE: {np.mean(epoch_loss):.6f} | " +
+            f"Foreground (Points) MSE: {np.mean(epoch_fg_loss):.6f} | " +
+            f"Background (Air) MSE: {np.mean(epoch_bg_loss):.6f} | Time: {elapsed_time:.2f}s"
+        )
+    
             
     return epoch_loss
 
