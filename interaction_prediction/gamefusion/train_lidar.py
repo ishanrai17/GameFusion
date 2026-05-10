@@ -36,7 +36,7 @@ def training_epoch(train_data, model, optimizer, epoch, args):
     accumulation_steps = 4  
 
     for idx, batch in enumerate(train_data):
-        lidar_sequence = batch.to(args.local_rank)
+        lidar_sequence = batch[7].to(args.local_rank)
         B, C, T, H, W = lidar_sequence.shape
         
         x = lidar_sequence.to(torch.float32)
