@@ -87,7 +87,7 @@ def validation_epoch(valid_data, model, epoch, args):
         logging.info(f'Validation... Epoch {epoch+1}')
 
     for batch in valid_data:
-        lidar_sequence = batch.to(args.local_rank)
+        lidar_sequence = batch[7].to(args.local_rank)
         
         # Ensure validation perfectly mirrors the corrected training dimensions
         B, C, T, H, W = lidar_sequence.shape
