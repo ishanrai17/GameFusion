@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from torch.utils.checkpoint import checkpoint
 
 class PositionalEncoding(nn.Module):
     def __init__(self, max_len=100):
@@ -445,9 +445,9 @@ class HierarchicalLiDARCNNMAE(nn.Module):
         # Apply mask directly in dense space to wipe out hidden features
         if mask is not None:
             x = x * (1.0 - mask)
-
+        stem_out = self.stem(x)
         # Stem: 748 -> 374
-        feat1 = self.enc_stage1(self.stem(x))
+        feat1 = checkpoint(self.enc_stage1, stem_out, use_reentrant=False)
         
         # Stage 2: 374 -> 187
         feat2 = self.enc_stage2(self.down1(feat1))
@@ -495,7 +495,10 @@ class HierarchicalLiDARCNNMAE(nn.Module):
         # Up 1: 187 -> 374 (Matches Skip 1 cleanly)
         d1 = self.up1(d2)
         d1 = F.interpolate(d1, size=feat1.shape[2:], mode='bilinear', align_corners=False)
-        d1 = self.dec_stage1(torch.cat([d1, feat1], dim=1))
+        cat_d1 = torch.cat([d1, feat1], dim=1)
+        
+        # CRITICAL VRAM FIX: Checkpoint Decoder Stage 1 entirely (Saves ~2.0 GB)
+        d1 = checkpoint(self.dec_stage1, cat_d1, use_reentrant=False)
 
         # Final Up: 374 -> 748 native output
         reconstruction = self.final_up(d1)
