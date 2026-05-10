@@ -28,50 +28,48 @@ scaler = torch.cuda.amp.GradScaler()
 def training_epoch(train_data, model, optimizer, epoch, args):
     epoch_loss = []
     model.train()
-    current = 0
+    total_samples = 0
     start_time = time.time()
-    size = len(train_data)
     
-    for batch in train_data:
-        # Incoming batch directly contains the collated uint8 tensor: [B, C, T, H, W]
-        # Example shape from DataLoader: [4, 24, 11, 748, 748]
-        lidar_sequence = batch[7].to(args.local_rank)
-        print("lidar_sequence.shape: ", lidar_sequence.shape)
-        # CRITICAL FIX: Unpack dimensions matching the exact transposed layout
+    # Define how many distinct scenes to accumulate before stepping
+    # Accumulating over 4 steps means updating weights based on 4 completely different map locations
+    accumulation_steps = 4  
+
+    for idx, batch in enumerate(train_data):
+        lidar_sequence = batch.to(args.local_rank)
         B, C, T, H, W = lidar_sequence.shape
         
-        # 1. Cast uint8 to float32 dynamically on the GPU
         x = lidar_sequence.to(torch.float32)
-        
-        # 2. Permute Time physically next to Batch: [B, T, C, H, W]
         x_permuted = x.permute(0, 2, 1, 3, 4).contiguous()
-        
-        # 3. Fold Batch and Time: 4 * 11 = 44 independent spatial frames
-        # Output shape beautifully matches what nn.Conv2d expects: [44, 24, 748, 748]
         x_folded = x_permuted.view(B * T, C, H, W)
 
-        optimizer.zero_grad()
-        
-        # End-to-end forward pass handles mask generation, U-Net decoding, and masked MSE loss
-        with torch.cuda.amp.autocast():
-            loss = model(x_folded)
-        
-        scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-        
-        scaler.step(optimizer)
-        scaler.update()
-        
-        current += B
-        epoch_loss.append(loss.item())
+        # We do NOT zero the gradients here anymore!
+        # optimizer.zero_grad()  <-- REMOVED
 
-        if dist.get_rank() == 0:
-            logging.info(
-                f"\rTrain Progress: [{current:>6d}/{size*args.batch_size:>6d}] " +
-                f"| Reconstruction MSE Loss: {np.mean(epoch_loss):>.6f} | " +
-                f"{(time.time()-start_time)/current:>.4f}s/sample"
-            )
+        # Forward pass
+        loss = model(x_folded)
+        
+        # Normalize the loss mathematically to account for the accumulation summation
+        normalized_loss = loss / accumulation_steps
+        
+        # Accumulate gradients into the autograd buffers
+        normalized_loss.backward()
+        
+        # Only update weights once we have accumulated enough diverse scenes
+        if (idx + 1) % accumulation_steps == 0 or (idx + 1) == len(train_data):
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+            optimizer.step()
+            optimizer.zero_grad() # Flush buffers strictly AFTER stepping
+
+        total_samples += B
+        epoch_loss.append(loss.item()) # Keep logging the raw un-normalized loss
+
+    if dist.get_rank() == 0:
+        elapsed_time = time.time() - start_time
+        logging.info(
+            f"Train Epoch {epoch+1} Summary | MSE Loss: {np.mean(epoch_loss):.6f} | " +
+            f"Total Time: {elapsed_time:.2f}s ({elapsed_time/total_samples:.4f}s/sample)"
+        )
     
     return epoch_loss
 
@@ -102,11 +100,12 @@ def validation_epoch(valid_data, model, epoch, args):
         current += B
         epoch_loss.append(loss.item())
 
+        # CRITICAL FIX: Log exactly ONCE here, after the entire validation loop finishes
         if dist.get_rank() == 0:
+            elapsed_time = time.time() - start_time
             logging.info(
-                f"\rValid Progress: [{current:>6d}/{size*args.batch_size:>6d}] " +
-                f"| Val MSE Loss: {np.mean(epoch_loss):>.6f} | " +
-                f"{(time.time()-start_time)/current:>.4f}s/sample"
+                f"Valid Epoch {epoch+1} Summary | Val MSE Loss: {np.mean(epoch_loss):.6f} | " +
+                f"Total Time: {elapsed_time:.2f}s"
             )
         del lidar_sequence, x, x_permuted, x_folded, loss
         torch.cuda.empty_cache()
