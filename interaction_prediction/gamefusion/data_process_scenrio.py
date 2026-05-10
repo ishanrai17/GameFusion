@@ -418,7 +418,8 @@ class DataProcessv1(DataProcess):
                         bev_frames = []
                         for lidar_pts in lidar_frames:
                             lidar_pts_norm = self.normalize_lidar_points(lidar_pts, center, angle)
-                            bev = self.extract_lidar_bev(lidar_pts_norm, -74.8, 74.8, -74.8, 74.8, -0.8, 4, 0.2, 0.2)
+                            # -74.8, 74.8, -74.8, 74.8, -0.8, 4, 0.2, 0.2
+                            bev = self.extract_lidar_bev(lidar_pts_norm, -51.2, 51.2, -51.2, 51.2, -0.8, 4.0, 0.2, 0.2)
                             bev_frames.append(bev)
                         lidar_bev = np.array(bev_frames, dtype=np.uint8)
                     else:
