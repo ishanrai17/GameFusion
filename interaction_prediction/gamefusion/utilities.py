@@ -1,8 +1,37 @@
 import glob
 import numpy as np
 from torch.utils.data import Dataset
+import torch
 
 
+
+# class DrivingData(Dataset):
+#     def __init__(self, data_dir):
+#         self.data_list = glob.glob(data_dir)
+
+#     def __len__(self):
+#         return len(self.data_list)
+    
+#     def __getitem__(self, idx):
+#         vector_path = self.data_list[idx]
+#         data = np.load(vector_path)
+#         ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type = None, None, None, None, None, None, None
+#         # ego = data['ego'][0]
+#         # neighbor = np.concatenate([data['ego'][1][np.newaxis,...], data['neighbors']], axis=0)
+
+#         # map_lanes = data['map_lanes'][:, :, :200:2]
+#         # map_crosswalks = data['map_crosswalks'][:, :, :100:2]
+#         # ego_future_states = data['gt_future_states'][0]
+#         # neighbor_future_states = data['gt_future_states'][1]
+#         # object_type = data['object_type']
+#         lidar_bev = data['lidar_bev'].astype(np.float32)
+#         lidar_bev = np.transpose(lidar_bev, (1, 0, 2, 3))
+
+#         return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, lidar_bev
+
+import glob
+import numpy as np
+from torch.utils.data import Dataset
 
 class DrivingData(Dataset):
     def __init__(self, data_dir):
@@ -13,16 +42,16 @@ class DrivingData(Dataset):
     
     def __getitem__(self, idx):
         vector_path = self.data_list[idx]
-        data = np.load(vector_path)
-        ego = data['ego'][0]
-        neighbor = np.concatenate([data['ego'][1][np.newaxis,...], data['neighbors']], axis=0)
+        
+        # Replace None with zero-dimensional empty tensors to satisfy default_collate
+        empty_tensor = torch.empty(0)
+        ego, neighbor, map_lanes, map_crosswalks = empty_tensor, empty_tensor, empty_tensor, empty_tensor
+        ego_future_states, neighbor_future_states, object_type = empty_tensor, empty_tensor, empty_tensor
 
-        map_lanes = data['map_lanes'][:, :, :200:2]
-        map_crosswalks = data['map_crosswalks'][:, :, :100:2]
-        ego_future_states = data['gt_future_states'][0]
-        neighbor_future_states = data['gt_future_states'][1]
-        object_type = data['object_type']
-        lidar_bev = data['lidar_bev'].astype(np.float32)
-        lidar_bev = np.transpose(lidar_bev, (1, 0, 2, 3))
+        # Safely open and guarantee closure of the .npz file handle
+        with np.load(vector_path) as data:
+            lidar_bev = data['lidar_bev'] 
+            lidar_bev = np.transpose(lidar_bev, (1, 0, 2, 3))
+            lidar_bev = lidar_bev.astype(np.float32)
 
         return ego, neighbor, map_lanes, map_crosswalks, ego_future_states, neighbor_future_states, object_type, lidar_bev

@@ -18,10 +18,11 @@ sys.path.insert(0, '/content/GameFusion')
 sys.path.insert(1, '/content/GameFusion/interaction_prediction')
 sys.argv = [a.replace('--local-rank', '--local_rank') for a in sys.argv]
 
-# Import downstream utilities and your custom MAE
 from utils.inter_pred_utils import *
 from interaction_prediction.gamefusion.utilities import DrivingData
-from model.LiDAR_CNN_MAE import HierarchicalLiDARCNNMAE  # Ensure this points to your MAE file
+
+# Import your Hierarchical CNN MAE (SparK style)
+from model.modules import HierarchicalLiDARCNNMAE
 
 
 def training_epoch(train_data, model, optimizer, epoch, args):
@@ -32,21 +33,26 @@ def training_epoch(train_data, model, optimizer, epoch, args):
     size = len(train_data)
 
     for batch in train_data:
-        # batch[7] holds the saved .npz uint8 lidar_bev array: [B, 11, 24, 748, 748]
+        # Incoming batch directly contains the collated uint8 tensor: [B, C, T, H, W]
+        # Example shape from DataLoader: [4, 24, 11, 748, 748]
         lidar_sequence = batch[7].to(args.local_rank)
+        print("lidar_sequence.shape: ", lidar_sequence.shape)
+        # CRITICAL FIX: Unpack dimensions matching the exact transposed layout
+        B, C, T, H, W = lidar_sequence.shape
         
-        B, T, C, H, W = lidar_sequence.shape
-        
-        # 1. Cast uint8 to float32 dynamically on the GPU to preserve CPU RAM bandwidth
+        # 1. Cast uint8 to float32 dynamically on the GPU
         x = lidar_sequence.to(torch.float32)
         
-        # 2. Fold Time into Batch to process frames as independent spatial snapshots
-        # Shape becomes: [B * 11, 24, 748, 748]
-        x_folded = x.view(B * T, C, H, W)
+        # 2. Permute Time physically next to Batch: [B, T, C, H, W]
+        x_permuted = x.permute(0, 2, 1, 3, 4).contiguous()
+        
+        # 3. Fold Batch and Time: 4 * 11 = 44 independent spatial frames
+        # Output shape beautifully matches what nn.Conv2d expects: [44, 24, 748, 748]
+        x_folded = x_permuted.view(B * T, C, H, W)
 
         optimizer.zero_grad()
         
-        # The forward pass automatically handles dynamic padding (748->752), masking, and MSE loss
+        # End-to-end forward pass handles mask generation, U-Net decoding, and masked MSE loss
         loss = model(x_folded)
         
         loss.backward()
@@ -77,11 +83,14 @@ def validation_epoch(valid_data, model, epoch, args):
         logging.info(f'Validation... Epoch {epoch+1}')
 
     for batch in valid_data:
-        lidar_sequence = batch[7].to(args.local_rank)
-        B, T, C, H, W = lidar_sequence.shape
+        lidar_sequence = batch.to(args.local_rank)
+        
+        # Ensure validation perfectly mirrors the corrected training dimensions
+        B, C, T, H, W = lidar_sequence.shape
         
         x = lidar_sequence.to(torch.float32)
-        x_folded = x.view(B * T, C, H, W)
+        x_permuted = x.permute(0, 2, 1, 3, 4).contiguous()
+        x_folded = x_permuted.view(B * T, C, H, W)
 
         with torch.no_grad():
             loss = model(x_folded)
@@ -114,10 +123,10 @@ def main():
     torch.cuda.set_device(local_rank)
     dist.init_process_group(backend='nccl')
 
-    # Initialize your Masked Autoencoder for 24-channel inputs
+    # Instantiate your Hierarchical CNN MAE
     model = HierarchicalLiDARCNNMAE(
-        in_chans=args.in_chans,   # 24
-        embed_dim=args.embed_dim, # 768
+        in_chans=args.in_chans,
+        embed_dim=args.embed_dim,
         mask_ratio=args.mask_ratio
     )
 
@@ -126,12 +135,11 @@ def main():
 
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
     
-    # Updated to ReduceLROnPlateau monitoring validation loss
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, 
-        mode='min',         # Minimize reconstruction loss
-        factor=0.5,         # Halve the learning rate
-        patience=2,         # Wait 2 epochs without improvement before dropping
+        mode='min',         
+        factor=0.5,         
+        patience=2,         
         threshold=1e-4, 
         verbose=True
     )
@@ -143,9 +151,7 @@ def main():
         model.load_state_dict(model_ckpts['model_states'])
         optimizer.load_state_dict(model_ckpts['optim_states'])
         curr_ep = model_ckpts['current_ep']
-        # Note: ReduceLROnPlateau doesn't use standard scheduler.step(epoch) mapping
     
-    # Datasets
     train_dataset = DrivingData(args.train_set+'/*')
     valid_dataset = DrivingData(args.valid_set+'/*')
 
@@ -158,6 +164,7 @@ def main():
     train_sampler = DistributedSampler(train_dataset)
     valid_sampler = DistributedSampler(valid_dataset, shuffle=False)
     
+    # Kept pin_memory=True to maximize GPU transfer speeds for the uint8 bytes
     train_data = DataLoader(
         train_dataset, batch_size=args.batch_size, 
         sampler=train_sampler, num_workers=args.workers, pin_memory=True
@@ -206,32 +213,28 @@ def main():
             }
             torch.save(save_state, log_path + f'epochs_{epoch}.pth')
 
-        # Step the plateau scheduler using the validation loss
         scheduler.step(mean_val_loss)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='LiDAR MAE Pretraining')
+    parser = argparse.ArgumentParser(description='LiDAR CNN-MAE Pretraining')
     parser.add_argument("--local_rank", type=int, default=0)
     
-    # Training parameters
-    parser.add_argument("--batch_size", type=int, default=4, help="Keep small due to B*T folding")
+    # Set conservative defaults to prevent host RAM out-of-memory errors
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--training_epochs", type=int, default=50)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument('--seed', type=int, default=3407)
     
-    # Logging and paths
-    parser.add_argument('--name', type=str, default="MAE_Pretraining_Run1")
+    parser.add_argument('--name', type=str, default="CNN_MAE_Pretraining_Run1")
     parser.add_argument('--load_dir', type=str, default='')
     parser.add_argument('--train_set', type=str, required=True)
     parser.add_argument('--valid_set', type=str, required=True)
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=1)
     
-    # MAE Specific parameters
-    parser.add_argument("--in_chans", type=int, default=24, help="Cropped Z-bins")
-    parser.add_argument("--embed_dim", type=int, default=768, help="Bottleneck feature dimension")
-    parser.add_argument("--patch_size", type=int, default=16, help="ViT spatial patch size")
-    parser.add_argument("--mask_ratio", type=float, default=0.75, help="Percentage of masked patches")
+    parser.add_argument("--in_chans", type=int, default=24)
+    parser.add_argument("--embed_dim", type=int, default=768)
+    parser.add_argument("--mask_ratio", type=float, default=0.75)
     
     args = parser.parse_args()
     main()

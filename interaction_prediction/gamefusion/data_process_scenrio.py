@@ -295,7 +295,7 @@ class DataProcessv1(DataProcess):
         
         return pts_norm
     
-    def get_lidar_point(scenario):
+    def get_lidar_point(self, scenario):
         all_frames = []
         for frame in scenario.compressed_frame_laser_data:
             pose = tf.constant(list(frame.pose.transform), dtype=tf.float64)
