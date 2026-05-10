@@ -24,14 +24,14 @@ from interaction_prediction.gamefusion.utilities import DrivingData
 # Import your Hierarchical CNN MAE (SparK style)
 from model.modules import HierarchicalLiDARCNNMAE
 
-
+scaler = torch.cuda.amp.GradScaler()
 def training_epoch(train_data, model, optimizer, epoch, args):
     epoch_loss = []
     model.train()
     current = 0
     start_time = time.time()
     size = len(train_data)
-
+    
     for batch in train_data:
         # Incoming batch directly contains the collated uint8 tensor: [B, C, T, H, W]
         # Example shape from DataLoader: [4, 24, 11, 748, 748]
@@ -53,11 +53,15 @@ def training_epoch(train_data, model, optimizer, epoch, args):
         optimizer.zero_grad()
         
         # End-to-end forward pass handles mask generation, U-Net decoding, and masked MSE loss
-        loss = model(x_folded)
+        with torch.cuda.amp.autocast():
+            loss = model(x_folded)
         
-        loss.backward()
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-        optimizer.step()
+        
+        scaler.step(optimizer)
+        scaler.update()
         
         current += B
         epoch_loss.append(loss.item())
@@ -104,6 +108,8 @@ def validation_epoch(valid_data, model, epoch, args):
                 f"| Val MSE Loss: {np.mean(epoch_loss):>.6f} | " +
                 f"{(time.time()-start_time)/current:>.4f}s/sample"
             )
+        del lidar_sequence, x, x_permuted, x_folded, loss
+        torch.cuda.empty_cache()
             
     return epoch_loss
 
