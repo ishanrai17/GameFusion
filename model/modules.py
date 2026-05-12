@@ -529,10 +529,15 @@ class HierarchicalLiDARCNNMAE(nn.Module):
             bg_mask = (x == 0).float() * mask
             bg_mse = (mse_loss * bg_mask).sum() / (bg_mask.sum() + 1e-8)
             
-            total_mse = (mse_loss * mask).sum() / (mask.sum() + 1e-8)
+            point_weight = torch.where(x > 0, 5.0, 1.0)
+            weighted_mse = mse_loss * point_weight
+            
+            total_mse = (weighted_mse * mask).sum() / (mask.sum() + 1e-8)
             return total_mse, fg_mse, bg_mse
         # Zero out errors on unmasked/visible pixels, average strictly across the hidden ones
-        masked_mse_loss = (mse_loss * mask).sum() / (mask.sum() + 1e-8)
+        point_weight = torch.where(x > 0, 5.0, 1.0)
+        weighted_mse = mse_loss * point_weight
+        masked_mse_loss = (weighted_mse * mask).sum() / (mask.sum() + 1e-8)
 
         return masked_mse_loss
 
