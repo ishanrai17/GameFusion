@@ -12,7 +12,7 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-
+from tqdm import tqdm
 # Setup paths
 sys.path.insert(0, '/content/GameFusion')
 sys.path.insert(1, '/content/GameFusion/interaction_prediction')
@@ -35,7 +35,7 @@ def training_epoch(train_data, model, optimizer, epoch, args):
     # Accumulating over 4 steps means updating weights based on 4 completely different map locations
     accumulation_steps = 4  
 
-    for idx, batch in enumerate(train_data):
+    for idx, batch in enumerate(tqdm(train_data)):
         lidar_sequence = batch[7].to(args.local_rank)
         B, C, T, H, W = lidar_sequence.shape
         
@@ -85,7 +85,7 @@ def validation_epoch(valid_data, model, epoch, args):
     if dist.get_rank() == 0:
         logging.info(f'Validation... Epoch {epoch+1}')
 
-    for batch in valid_data:
+    for batch in tqdm(valid_data):
         lidar_sequence = batch[7].to(args.local_rank)
         
         # Ensure validation perfectly mirrors the corrected training dimensions
@@ -160,6 +160,7 @@ def main():
         model.load_state_dict(model_ckpts['model_states'])
         optimizer.load_state_dict(model_ckpts['optim_states'])
         curr_ep = model_ckpts['current_ep']
+        print("loaded model")
     
     train_dataset = DrivingData(args.train_set+'/*')
     valid_dataset = DrivingData(args.valid_set+'/*')
@@ -185,7 +186,7 @@ def main():
 
     epochs = args.training_epochs
 
-    for epoch in range(epochs):
+    for epoch in range(2, epochs):
         if dist.get_rank() == 0:
             logging.info(f"Epoch {epoch+1}/{epochs}")
         
